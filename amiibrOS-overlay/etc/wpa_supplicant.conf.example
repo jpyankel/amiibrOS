@@ -1,0 +1,10 @@
+ctrl_interface=/var/run/wpa_supplicant
+
+network={
+  ssid="SSID HERE"
+  psk="PASSWORD HERE"
+  proto=RSN
+  key_mgmt=WPA-PSK
+  pairwise=CCMP
+  auth_alg=OPEN
+}

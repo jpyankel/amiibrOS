@@ -1,0 +1,11 @@
+# Loopback Interface (mandatory for system)
+auto lo
+iface lo inet loopback
+
+# Wireless Interface
+# Note that -D wext is necessary (empirically) for our ssh to work.
+auto wlan0
+iface wlan0 inet dhcp
+  pre-up wpa_supplicant -B -c /etc/wpa_supplicant.conf -D wext -i wlan0
+  post-down killall -q wpa_supplicant
+

@@ -1,0 +1,9 @@
+[submodule "buildroot"]
+	path = buildroot
+	url = https://github.com/JYandev/buildroot.git
+[submodule "amiibrOS-raylib"]
+	path = amiibrOS-raylib
+	url = https://github.com/JYandev/amiibrOS-raylib.git
+[submodule "amiibrOS-buildroot"]
+	path = amiibrOS-buildroot
+	url = https://github.com/JYandev/amiibrOS-buildroot.git
