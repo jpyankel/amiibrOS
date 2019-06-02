@@ -1,10 +1,10 @@
 /**
  * main.c
  *
- * Contains implementation of amiibrOS_interface. Features a cool logo and an
- *   indicator for amiibo NFC.
+ * Contains implementation of amiibrOS's main_interface. Features a cool logo
+ *   and an indicator for amiibo NFC.
  * The indicator (referred to as touch indicator or TI), pulses, fading in and
- *   out and switches colors.
+ *   out and switching colors.
  * 
  * Joseph Yankel (jpyankel@gmail.com)
  */

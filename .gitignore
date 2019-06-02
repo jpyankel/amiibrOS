@@ -4,5 +4,8 @@ amiibrOS-overlay/etc/wpa_supplicant.conf
 # Ignore subproject includes
 subproj/include/
 
+# Ignore os_ctrl build
+subproj/os_ctrl/build/
+
 # Ignore interface build
 subproj/main_interface/build/
