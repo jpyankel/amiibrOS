@@ -22,6 +22,7 @@
 #include <stdlib.h> // exit
 #include <signal.h> // signal
 #include <sys/wait.h> // waitpid
+#include <stdbool.h> // true, false
 
 #define INTERPRETER_PATH "/usr/bin/python"
 #define A_SCAN_PATH "/usr/bin/amiibrOS/amiibo_scan/amiibo_scan.py"
@@ -45,6 +46,79 @@
 pid_t a_scan_pid;
 
 /**
+ * Prints error message (and optionally errno's error).
+ * Sends SIGTERM to all child processes and waits for each to exit.
+ * Terminates the program with an error status.
+ * This is not async signal safe.
+ *
+ * Should be called from parent process
+ */
+void p_exit_err (const char *msg, bool perrno)
+{
+  if (perrno) 
+    perror(msg);
+  else
+    printf(msg);
+
+  // Ignore sigchld so that we don't jump to sigchld_handler:
+  sigset_t block_set;
+  sigemptyset(&block_set);
+  sigaddset(&block_set, SIGCHLD);
+  sigprocmask(SIG_BLOCK, &block_set, NULL);
+
+  // Send terminate signal to all inside our process group
+  pid_t gid = getpgid(getpid());
+  kill(-gid, SIGTERM);
+
+  while (wait(NULL) > 0); // Will wait until -1 returned (ERROR)
+  // We just assume that the ERROR is no child processes left, ignore any other
+  //   wait errors, just return:
+  exit(1);
+}
+
+/**
+ * Prints error message.
+ * Sends SIGTERM to all child processes and waits for each to exit.
+ * Terminates the program with an error status.
+ * This version is async-signal-safe.
+ *
+ * Should be called from parent process.
+ */
+void p_exit_err_sigsafe (const char *msg, size_t len)
+{
+  // Ignore sigchld so that we don't jump to sigchld_handler:
+  sigset_t block_set;
+  sigemptyset(&block_set);
+  sigaddset(&block_set, SIGCHLD);
+  sigprocmask(SIG_BLOCK, &block_set, NULL);
+
+  // Print error message:
+  write(STDOUT_FILENO, msg, len);
+  // Send terminate signal to all children:
+  pid_t gid = getpgid(getpid());
+  kill(-gid, SIGTERM);
+  // Wait until all finish:
+  while (wait(NULL) > 0);
+
+  exit(1);
+}
+
+/**
+ * Send SIGTERM signal to parent process after reporting error.
+ * Should be called from child process.
+ */
+void c_exit_err (const char *msg, bool perrno)
+{
+  if (perrno) 
+    perror(msg);
+  else
+    printf(msg);
+
+  kill(getppid(), SIGTERM); // send terminate signal to parent process.
+  exit(1);
+}
+
+/**
  * SIGCHLD handler. It is used to reap app subprocesses and to detect if the
  *   scanner subprocess terminates.
  *
@@ -60,17 +134,39 @@ void sigchld_handler(int sig)
   // Quickly check and reap ready processes (do not block if there are none)
   while ( (p = waitpid(-1, NULL, WNOHANG)) > 0) {
     if (p == a_scan_pid) {
-      write(STDOUT_FILENO, SIGCHLD_SCANNER_ERROR, SIGCHLD_SCANNER_ERROR_LEN);
-      exit(1);
+      // print error message, wait for processes to die, exit.
+      p_exit_err_sigsafe(SIGCHLD_SCANNER_ERROR, SIGCHLD_SCANNER_ERROR_LEN);
     }
   }
   if (p == -1) {
     // A programmer error occured.
-    write(STDOUT_FILENO, PROG_ERROR, PROG_ERROR_LEN);
-    exit(1);
+    p_exit_err_sigsafe(PROG_ERROR, PROG_ERROR_LEN);
   }
 
   errno = preserve_errno;
+}
+
+/**
+ * Handles SIGTERM (and SIGINT) signals.
+ * Signals SIGTERM to all children and waits to reaps them all before exiting.
+ */
+void sigterm_handler(int sig)
+{
+  (void)sig; // Ignore compiler warning
+
+  // Ignore sigchld so that we don't jump to sigchld_handler:
+  sigset_t block_set;
+  sigemptyset(&block_set);
+  sigaddset(&block_set, SIGCHLD);
+  sigprocmask(SIG_BLOCK, &block_set, NULL);
+
+  // Send terminate signal to all inside our process group
+  pid_t gid = getpgid(getpid());
+  kill(-gid, SIGTERM);
+
+  while (wait(NULL) > 0); // Will wait until all child processes terminate
+  
+  exit(1);
 }
 
 /**
@@ -120,33 +216,31 @@ int main (void)
   sigset_t prev_set, block_set;
 
   // Set up pipe for communication between amiibo_scan and this process
-  if (pipe(pipefds)) {
-    perror("os_ctrl unable to create pipe\nerror");
-    return 1; // Exit with error
-  }
+  if (pipe(pipefds))
+    p_exit_err("os_ctrl unable to create pipe\nerror", true);
 
   // Construct signal block mask:
-  if (sigemptyset(&block_set) == -1 || sigaddset(&block_set, SIGCHLD) == -1) {
-    perror("os_ctrl unable to create signal mask\nerror");
-    return 1;
-  }
+  if (sigemptyset(&block_set) == -1 || sigaddset(&block_set, SIGCHLD) == -1)
+    p_exit_err("os_ctrl unable to create signal mask\nerror", true);
+
   // Block signals:
-  if (sigprocmask(SIG_BLOCK, &block_set, &prev_set) == -1) {
-    perror("os_ctrl unable to block signals\nerror");
-    return 1;
-  }
+  if (sigprocmask(SIG_BLOCK, &block_set, &prev_set) == -1)
+    p_exit_err("os_ctrl unable to block signals\nerror", true);
+
   // Install SIGCHLD handler.
-  if (signal(SIGCHLD, sigchld_handler) == SIG_ERR) {
-    printf("os_ctrl unable to install signal handler\nerror");
-    return 1;
-  }
+  if (signal(SIGCHLD, sigchld_handler) == SIG_ERR)
+    p_exit_err("os_ctrl unable to install signal handler\nerror", true);
+  
+  // Install SIGTERM and SIGINT handler:
+  if (signal(SIGTERM, sigterm_handler) == SIG_ERR)
+    p_exit_err("os_ctrl unable to install signal handler\nerror", true);
+  if (signal(SIGINT, sigterm_handler) == SIG_ERR)
+    p_exit_err("os_ctrl unable to install signal handler\nerror", true);
 
   if ( (a_scan_pid = fork()) == 0) { // SCANNER CHILD BEGIN
     // Delete unused read-end of the pipe for child
-    if (close(pipefds[0])) {
-      perror("os_ctrl unable to close read end of pipe\nerror");
-      return 1;
-    }
+    if (close(pipefds[0]))
+      c_exit_err("os_ctrl unable to close read end of pipe\nerror", true);
 
     // Execute amiibo_scan.py
     // Construct argv and exec the python interpreter:
@@ -157,52 +251,42 @@ int main (void)
 
     // If execv returns, we had an error
     perror("os_ctrl unable to spawn amiibo_scan\nerror");
-    return 1;
     // Note: We did not need to fiddle with the signal handler or blocked set
     //   in the child process as they get overwritten by execv anyways.
   } // SCANNER CHILD END
   else {
     // Close unused write-end of pipe for parent (and for other process).
-    if (close(pipefds[1])) {
-      perror("os_ctrl unable to close write end of pipe\nerror");
-      return 1;
-    }
+    if (close(pipefds[1]))
+      p_exit_err("os_ctrl unable to close write end of pipe\nerror", true);
 
     // Fork the main_interface process as our first app:
     if ( (app_pid = fork()) == 0) { // APP CHILD BEGIN
       // Close unused read-end of pipe for the newly spawned app
-      if (close(pipefds[0])) {
-        perror("os_ctrl unable to close write end of pipe\nerror");
-        return 1;
-      }
+      if (close(pipefds[0]))
+        c_exit_err("os_ctrl unable to close write end of pipe\nerror", true);
 
       // Change directory to exec from (we want all relative paths to function)
-      if (chdir(MAIN_INTERFACE_FOLDER) == -1) {
-        perror("os_ctrl unable to change directory for main_interface\nerror");
-        return 1;
-      }
+      if (chdir(MAIN_INTERFACE_FOLDER) == -1)
+        c_exit_err("os_ctrl unable to change dir. for main_interface\nerror",
+            true);
 
       char *const argv[] = {MAIN_INTERFACE_PATH, NULL};
       execv(MAIN_INTERFACE_PATH, argv);
       
-      perror("os_ctrl unable to spawn main_interface\nerror");
-      return 1;
+      c_exit_err("os_ctrl unable to spawn main_interface\nerror", true);
       // Note, as mentioned ealier, no need to undo our signal stuff
     } // APP CHILD END
     else {
       // Unblock SIGCHLD
-      if (sigprocmask(SIG_SETMASK, &prev_set, NULL) == -1) {
-        perror("os_ctrl unable to unblock signals\nerror");
-        return 1;
-      }
+      if (sigprocmask(SIG_SETMASK, &prev_set, NULL) == -1)
+        p_exit_err("os_ctrl unable to unblock signals\nerror", true);
       // Continuously monitor the scanner:
       char info_buf[TAG_INFO_SIZE];
       for(;;) {
         if (read_tag_info(pipefds[0], info_buf) == 0) {
           // Write-end of pipe closed prematurely. There is an error!
-          printf("os_ctrl detected erroneous pipe disconnect\nerror: pipe "
-              "write-end closed prematurely\n");
-          return 1;
+          p_exit_err("os_ctrl detected erroneous pipe disconnect\nerror: pipe "
+              "write-end closed prematurely\n", false);
         }
 
         // TODO -------------------- DELETE -------------------------
