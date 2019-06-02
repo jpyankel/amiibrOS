@@ -11,7 +11,8 @@ to build your own, please visit (TODO).
 The following procedure will result in an amiibrOS SD card bootable on a
 Raspberry Pi 3B+.
 
-Materials needed:
+Prerequisites:
 * SD Card (TODO SIZE)
+* (TODO OS and libraries)
 
-TODO
+(TODO Instructions)
