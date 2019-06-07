@@ -17,11 +17,12 @@
  */
 
 #include <unistd.h> // pipe, fork, execv, ... etc. system calls.
-#include <stdio.h> // perror
+#include <stdio.h> // perror, sprintf
 #include <errno.h> // errno
 #include <stdlib.h> // exit
 #include <signal.h> // signal
-#include <sys/wait.h> // waitpid
+#include <sys/wait.h> // waitpid, wait
+#include <sys/stat.h> // stat
 #include <stdbool.h> // true, false
 
 #define INTERPRETER_PATH "/usr/bin/python"
@@ -30,20 +31,31 @@
 #define MAIN_INTERFACE_PATH (MAIN_INTERFACE_FOLDER "/main_interface")
 
 // Tag info size in bytes to be retrieved from scanner output:
-#define TAG_INFO_SIZE 4
+#define RAW_INFO_SIZE 4
+// 
+#define HEX_TAG_SIZE (RAW_INFO_SIZE*2)
+
+// Directory holding all of the game/display app directories:
+#define APP_ROOT_PATH "/usr/bin/amiibrOS/app"
+// Length of "/usr/bin/amiibrOS/app/12345678" (+1 for extra '/')
+#define APP_DIR_LEN (sizeof(APP_ROOT_PATH) + HEX_TAG_SIZE + 1)
+// Length of "/usr/bin/amiibrOS/app/12345678/12345678" (+1 for '/')
+#define APP_PATH_LEN (APP_DIR_LEN + HEX_TAG_SIZE + 1)
 
 // Error message for when the scanner terminates early:
 #define SIGCHLD_SCANNER_ERROR "os_ctrl unexpected sigchld\nerror: "\
                               "sigchld_handler reaped scanner\n"
 // -1 since we need not include the NUL terminator:
-#define SIGCHLD_SCANNER_ERROR_LEN sizeof(SIGCHLD_SCANNER_ERROR) - 1
+#define SIGCHLD_SCANNER_ERROR_LEN (sizeof(SIGCHLD_SCANNER_ERROR) - 1)
 // Error message for when a programmer error occurs:
 #define PROG_ERROR "os_ctrl programmer error occured\n"
-#define PROG_ERROR_LEN sizeof(PROG_ERROR) - 1
+#define PROG_ERROR_LEN (sizeof(PROG_ERROR) - 1)
 
 // amiibo scan subprocess pid. Important for sigchld_handler. Should be set
 //   only once during this process's lifetime.
-pid_t a_scan_pid;
+static pid_t a_scan_pid;
+static pid_t app_pid; // current game/display pid
+static int pipefds[2];
 
 /**
  * Prints error message (and optionally errno's error).
@@ -170,7 +182,7 @@ void sigterm_handler(int sig)
 }
 
 /**
- * Reads TAG_INFO_SIZE bytes from pipe read end given by pipefd and stores it
+ * Reads RAW_INFO_SIZE bytes from pipe read end given by pipefd and stores it
  *   in info_buf. Returns the total number of bytes read - useful for checking
  *   if the write-end of the pipe was closed prematurely.
  *
@@ -178,18 +190,18 @@ void sigterm_handler(int sig)
  *   If read would fail in any other case, this function causes the program to
  *   with an error message.
  *
- * Note, this is a blocking call. We only return when TAG_INFO_SIZE bytes have
+ * Note, this is a blocking call. We only return when RAW_INFO_SIZE bytes have
  *   been read into info_buf, or if the write-end of the pipe was closed.
  */
-size_t read_tag_info (int pipefd, char *info_buf)
+size_t read_raw_info (int pipefd, char *raw_info)
 {
   ssize_t rd_total = 0; // # of chars in info_buf (also next idx to write to)
   ssize_t rd_cnt; // tmp var for storing return value of read sys call
 
   // read will block until either EOF, error, or some number of chars are read
   // We must also check if rd_total has already been read
-  while ( rd_total != TAG_INFO_SIZE &&
-      (rd_cnt = read(pipefd, info_buf+rd_total, TAG_INFO_SIZE-rd_total)) != 0)
+  while ( rd_total != RAW_INFO_SIZE &&
+      (rd_cnt = read(pipefd, raw_info+rd_total, RAW_INFO_SIZE-rd_total)) != 0)
   {
     // We have read a non-zero number of chars!
     if (rd_cnt == -1) { // Check for errors
@@ -209,10 +221,68 @@ size_t read_tag_info (int pipefd, char *info_buf)
   return rd_total;
 }
 
+/**
+ * Converts a char array containing raw bytes into a hex string.
+ * Array hex_tag must be of length HEX_TAG_SIZE + 1
+ */
+void raw_to_hex_tag (const char *raw_info, char *hex_tag)
+{
+  for (unsigned int i = 0; i < RAW_INFO_SIZE; i++) {
+    sprintf(hex_tag + 2*i, "%02X", (unsigned char)raw_info[i]);
+  }
+  hex_tag[HEX_TAG_SIZE] = '\0'; // Assign NUL manually
+}
+
+/**
+ * Uses the given hex_tag to find an app for launching.
+ * Launches this app, replacing any old app processes.
+ */
+void launch_app (const char *hex_tag)
+{
+  char app_dir[APP_DIR_LEN + 1]; // +1 for NUL
+  char app_path[APP_PATH_LEN + 1]; // +1 for NUL
+  struct stat stat_buf; // We need this as a mandatory parameter for stat call
+
+  // Construct the paths to the directory and executable:
+  sprintf(app_dir, "%s/%s", APP_ROOT_PATH, hex_tag);
+  sprintf(app_path, "%s/%s", app_dir, hex_tag);
+
+  printf("app_path: %s\n", app_path);
+
+  // Check if a program matching hex_tag exists and is accessible:
+  if (stat(app_path, &stat_buf) != -1) {
+    // Write the hex_tag to the global last_scanned file:
+    // TODO
+
+    // Send SIGTERM signal to current app_pid to close it:
+    kill(app_pid, SIGTERM);
+    // Reaping is done via the sigchld handler
+
+    // Attempt to execute a new app:
+    if ( (app_pid = fork()) == 0) {
+      // Close unused read-end of pipe for the newly spawned app
+      if (close(pipefds[0]))
+        c_exit_err("os_ctrl unable to close write end of pipe\nerror", true);
+
+      // Change directory to exec from (we want all relative paths to function)
+      if (chdir(app_dir) == -1)
+        c_exit_err("os_ctrl unable to change dir. for new app\nerror", true);
+
+      execl(app_path, app_path, NULL);
+      
+      c_exit_err("os_ctrl unable to spawn app\nerror", true);
+      // Note, as mentioned ealier, no need to undo our signal stuff
+    }
+  }
+  else {
+    // No program matches. Notify user of the given amiibo's incompatibility:
+    // TODO Send sigusr1
+    perror("AMIIBO APP NOT FOUND\nerror"); // TODO Remove
+  }
+}
+
 int main (void)
 {
-  int pipefds[2];
-  pid_t app_pid; // current game/display pid
   sigset_t prev_set, block_set;
 
   // Set up pipe for communication between amiibo_scan and this process
@@ -280,26 +350,23 @@ int main (void)
       // Unblock SIGCHLD
       if (sigprocmask(SIG_SETMASK, &prev_set, NULL) == -1)
         p_exit_err("os_ctrl unable to unblock signals\nerror", true);
+
       // Continuously monitor the scanner:
-      char info_buf[TAG_INFO_SIZE];
+      char raw_info[RAW_INFO_SIZE];
+      char hex_tag[HEX_TAG_SIZE + 1]; // +1 for NUL
       for(;;) {
-        if (read_tag_info(pipefds[0], info_buf) == 0) {
+        // Read raw tag
+        if (read_raw_info(pipefds[0], raw_info) == 0) {
           // Write-end of pipe closed prematurely. There is an error!
           p_exit_err("os_ctrl detected erroneous pipe disconnect\nerror: pipe "
               "write-end closed prematurely\n", false);
         }
 
-        // TODO -------------------- DELETE -------------------------
-        printf("Parent read: ");
-        for (size_t i = 0; i < TAG_INFO_SIZE; i++) {
-          printf("%02X", (unsigned char)(info_buf[i]));
-        }
-        printf("\n");
-        // TODO -------------------- DELETE -------------------------
-        // Identify the amiibo scanned:
-        // TODO
-        // Send SIGTERM signal to current app_pid, reap it, and fork next app:
-        // TODO
+        // Convert raw tag to hex string:
+        raw_to_hex_tag(raw_info, hex_tag);
+        
+        // Launch app based on hex string:
+        launch_app(hex_tag);
       }
     }
   }
