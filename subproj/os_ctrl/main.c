@@ -30,16 +30,16 @@
 #define MAIN_INTERFACE_FOLDER "/usr/bin/amiibrOS/main_interface"
 #define MAIN_INTERFACE_PATH (MAIN_INTERFACE_FOLDER "/main_interface")
 
-// Tag info size in bytes to be retrieved from scanner output:
+// Raw info size in bytes to be retrieved from scanner output:
 #define RAW_INFO_SIZE 4
-// 
+// Size of hex string we will construct from the raw info (not including NUL):
 #define HEX_TAG_SIZE (RAW_INFO_SIZE*2)
 
 // Directory holding all of the game/display app directories:
 #define APP_ROOT_PATH "/usr/bin/amiibrOS/app"
-// Length of "/usr/bin/amiibrOS/app/12345678" (+1 for extra '/')
+// Length of "/usr/bin/amiibrOS/app/12345678" (+1 for extra '/', no NUL)
 #define APP_DIR_LEN (sizeof(APP_ROOT_PATH) + HEX_TAG_SIZE + 1)
-// Length of "/usr/bin/amiibrOS/app/12345678/12345678" (+1 for '/')
+// Length of "/usr/bin/amiibrOS/app/12345678/12345678" (+1 for '/', no NUL)
 #define APP_PATH_LEN (APP_DIR_LEN + HEX_TAG_SIZE + 1)
 
 // Error message for when the scanner terminates early:
@@ -49,13 +49,14 @@
 #define SIGCHLD_SCANNER_ERROR_LEN (sizeof(SIGCHLD_SCANNER_ERROR) - 1)
 // Error message for when a programmer error occurs:
 #define PROG_ERROR "os_ctrl programmer error occured\n"
+// Length of above error:
 #define PROG_ERROR_LEN (sizeof(PROG_ERROR) - 1)
 
 // amiibo scan subprocess pid. Important for sigchld_handler. Should be set
 //   only once during this process's lifetime.
 static pid_t a_scan_pid;
 static pid_t app_pid; // current game/display pid
-static int pipefds[2];
+static int pipefds[2]; // pipes to communicate with scanner program
 
 /**
  * Prints error message (and optionally errno's error).

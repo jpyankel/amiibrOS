@@ -7,3 +7,9 @@ It is responsible for:
   detections.
 * Spawning and signaling game/UI subprocesses.
 * (TODO) Handling power switches and other GPIO/Bluetooth stuff.
+
+os_ctrl launches apps (games / image or gif displays), assuming the following
+structure: /usr/bin/amiibrOS/app/########/########, where the #s denote an 8
+character hex string corresponding to the first 4 bytes of the amiibo's
+character ID (found at start of 15th block of ntag213). Ex:
+/usr/bin/amiibrOS/app/12345678/12345678
