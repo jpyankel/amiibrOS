@@ -7,7 +7,7 @@
 #      executable has to be copied over to the Pi via ssh or other means.
 
 .RECIPEPREFIX += 
-.PHONY: all
+.PHONY: all rpi clean
 
 # Define compiler flags:
 #  -O1                  defines optimization level
@@ -45,12 +45,19 @@ LIBS = -lraylib -lbrcmGLESv2 -lbrcmEGL -lpthread -lrt -lm -lbcm_host -ldl
 # === ===
 
 all: main_interface_DEV main_interface
-  mkdir -p $(BUILD_DIR)
-  cp -r resources $(BUILD_DIR)
+
+rpi: main_interface
 
 # amiibrOS_DEV compiled for development and testing on Linux.
 main_interface_DEV: main.c
+  mkdir -p $(BUILD_DIR)
+  cp -r resources $(BUILD_DIR)
   $(CC_DEV) $(DEV_CFLAGS) $(DEV_LIBS) -o $(BUILD_DIR)/main_interface_DEV main.c
 
 main_interface: main.c
+  mkdir -p $(BUILD_DIR)
+  cp -r resources $(BUILD_DIR)
   $(CC) $(CFLAGS) $(LIBS) -o $(BUILD_DIR)/main_interface main.c
+
+clean: 
+  rm -rf $(BUILD_DIR) | true # Clean build dir before starting
