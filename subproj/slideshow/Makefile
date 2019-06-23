@@ -19,7 +19,7 @@
 #  -Wno-missing-braces  ignore invalid warning (GCC bug 53119)
 #  -D_DEFAULT_SOURCE    use with -std=c99 on Linux and PLATFORM_WEB, required
 #                       for timespec
-BASE_CFLAGS = -O1 -s -Wall -std=c99 -D_DEFAULT_SOURCE -Wno-missing-braces \
+BASE_CFLAGS = -O1 -g -Wall -std=c99 -D_DEFAULT_SOURCE -Wno-missing-braces \
   -Wextra -Wstrict-prototypes
 
 BUILD_DIR = build

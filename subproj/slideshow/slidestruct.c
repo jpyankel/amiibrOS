@@ -10,6 +10,7 @@
 #include <string.h> // strcat, strncpy
 #include <stdlib.h> // malloc, NULL
 #include <ctype.h> // isspace
+#include <errno.h> // Various error code consts.
 #include "slidestruct.h" // includes bool type
 
 // --- Helper Function Prototypes ---
@@ -20,8 +21,10 @@ slidestruct *slidestruct_read_conf (const char *path)
 {
   // Open file at path for reading:
   FILE *f;
-  if ((f = fopen(path, "r")) == NULL)
+  if ((f = fopen(path, "r")) == NULL) {
+    perror("slidestruct read file open error");
     return NULL;
+  }
   
   char *linebuf = NULL;
   size_t buflen = 0; // Updated to hold the length of linebuf.
@@ -47,6 +50,8 @@ slidestruct *slidestruct_read_conf (const char *path)
 
       free(linebuf);
       linebuf = newbuf; // Point linebuf at our newly created buffer
+      // We added a new string of prevlinebuf - 1 length (NUL not included),
+      nchar += prevlinebuflen - 1; // so we add this many to nchar
 
       free(prevlinebuf);
       concat_next = false; // Reset flag
@@ -85,11 +90,18 @@ slidestruct *slidestruct_read_conf (const char *path)
   }
 
   free(linebuf); // Needs to be freed regardless of error.
-
-  if (nchar == -1) { // We ended due to error
-    // There was an error in reading: print error and return NULL
-    perror("slidestruct read configuration error");
+  
+  if (fclose(f)) {
+    perror("slidestruct read file close error");
     return NULL;
+  }
+
+  if (nchar == -1) { // We ended due to error or EOF
+    if (errno == EINVAL || errno == ENOMEM) {
+      // There was an error in reading: print error and return NULL
+      perror("slidestruct read configuration error");
+      return NULL;
+    }
   }
 
   return NULL; //TODO: REMOVE
@@ -106,6 +118,8 @@ bool is_whitespace_str (const char *str)
   while ( (c = str[idx]) != '\0') {
     if (!isspace(c))
       return false;
+    
+    idx++;
   }
 
   // We searched every char and didn't find anything except whitespace: i.e.
