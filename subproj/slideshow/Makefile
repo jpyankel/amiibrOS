@@ -47,13 +47,13 @@ LIBS = -lraylib -lbrcmGLESv2 -lbrcmEGL -lpthread -lrt -lm -lbcm_host -ldl
 all: slideshow_DEV slideshow
 
 # amiibrOS_DEV compiled for development and testing on Linux.
-os_ctrl_DEV: slidestruct.h slidestruct.c main.c
+slideshow_DEV: slidestruct.h slidestruct.c main.c
   mkdir -p $(BUILD_DIR)
   cp -r resources $(BUILD_DIR) | true
   $(CC_DEV) $(DEV_CFLAGS) $(DEV_LIBS) -o $(BUILD_DIR)/slideshow_DEV\
 		slidestruct.h slidestruct.c main.c
 
-os_ctrl: slidestruct.h slidestruct.c main.c
+slideshow: slidestruct.h slidestruct.c main.c
   mkdir -p $(BUILD_DIR)
   cp -r resources $(BUILD_DIR) | true
   $(CC) $(CFLAGS) $(LIBS) -o $(BUILD_DIR)/slideshow slidestruct.h \

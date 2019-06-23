@@ -4,7 +4,8 @@
  * Contains prototypes for the slidestruct object.
  *
  * The slidestruct is a singly-linked-list entry representing one slide in the
- *   slideshow. 
+ *   slideshow. One slidestruct contains multiple imgstructs. Each imgstruct
+ *   represents an image in that slide.
  *
  * Joseph Yankel (jpyankel@gmail.com)
  */
@@ -13,7 +14,7 @@
 #include "raylib.h"
 
 // Type of interpolation
-enum interp_type
+typedef enum interp_type
 {
   NONE = 0,
   LINEAR = 1,
@@ -25,40 +26,48 @@ enum interp_type
   BACK = 7,
   BOUNCE = 8,
   ELASTIC = 9,
-};
+} interp_type;
+
+/**
+ * Container for image information. A slidestruct contains an array of these so
+ *   that there can be multiple images with different animations on a single
+ *   slide.
+ */
+typedef struct imgstruct
+{
+  char *img_name; // Path (relative to resources) to the image
+
+  Color tint_i; // initial image tint color
+  Color tint_f; // final image tint color
+  interp_type tint_interp; // image tint interpolation type
+  float tint_duration; // duration of the tint color transition in seconds
+  
+  Vector2 pos_i; // initial image position
+  Vector2 pos_f; // final image position
+  interp_type pos_interp; // image position interpolation type
+  float pos_duration; // duration of the position transform in seconds
+  
+  Vector2 size_i; // initial image size
+  Vector2 size_f; // final image size
+  interp_type size_interp; // size interpolation type
+  float size_duration; // duration of the size change in seconds
+  
+  float rot_i; // initial image rotation
+  float rot_f; // final image rotation
+  interp_type rot_interp; // rotation interpolation type
+  float rot_duration; // duration of the rotation in seconds
+} imgstruct;
 
 /**
  * Singly-linked-list entry representing one slide in the slideshow.
  */
 typedef struct slidestruct
 {
-  char *title; // Changes text displayed when this slidestruct is chosen
-  char *img_name; // Path to the image to display
-  float img_duration; // Image display time
+  char *title; // Changes corner text displayed when this slidestruct is chosen
+  float title_duration; // How long before the title fades out in seconds
+  float slide_duration; // slide display time in seconds
+  imgstruct **images; // All imagestructs to be displayed on this slide
 
-  Color bgcolor_i; // Initial background color to display behind the image
-  Color bgcolor_f; // Final background color to display behind the image
-  Color tint_i; // initial tint color
-  Color tint_f; // final tint color
-  Vector2 pos_i; // initial position
-  Vector2 pos_f; // final position
-  Vector2 size_i; // initial size
-  Vector2 size_f; // final size
-  float rot_i; // initial rotation
-  float rot_f; // final rotation
-
-  interp_type bgcolor_interp; // bgcolor interpolation type
-  interp_type tint_interp; // tint interpolation type
-  interp_type pos_interp; // position interpolation type
-  interp_type size_interp; // size interpolation type
-  interp_type rot_interp; // rotation interpolation type
-
-  float bgcolor_duration; // Duration of the background color transition
-  float tint_duration; // duration of the tint color transition
-  float pos_duration; // duration of the position transform
-  float size_duration; // duration of the size change
-  float rot_duration; // duration of the rotation
-  
   struct slidestruct *next; // Next slidestruct in the list (can be NULL)
 } slidestruct;
 
@@ -72,4 +81,4 @@ typedef struct slidestruct
  * * the text data at path is malformed
  * * any malloc or open errors would occur
  */
-slidestruct *slidestruct_read_conf (char *path);
+slidestruct *slidestruct_read_conf (const char *path);

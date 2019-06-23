@@ -9,3 +9,6 @@ subproj/os_ctrl/build/
 
 # Ignore interface build
 subproj/main_interface/build/
+
+# Ignore slideshow build
+subproj/slideshow/build/
