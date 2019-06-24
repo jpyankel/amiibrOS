@@ -43,5 +43,20 @@ to this folder).
 * The previous examples assumes slideshow is being run in a directory
   containing slideshow and resources/, where resources contains some folders
   or files including josephImages/joe.png
-
 TODO
+tint_i
+tint_f
+tint_interp
+tint_duration
+pos_i
+pof_f
+pos_interp
+pos_duration
+size_i
+size_f
+size_interp
+size_duration
+rot_i
+rot_f
+rot_interp
+rot_duration
