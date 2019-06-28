@@ -13,9 +13,6 @@
 #include <errno.h> // Various error code consts.
 #include "slidestruct.h" // includes bool type
 
-// The length of the largest option is 14 (+1 for NUL).
-//const size_t OPTION_BUF_LEN = 15
-
 // --- Helper Function Prototypes ---
 bool is_whitespace_str (const char *str);
 const char *first_non_whitespace_char (const char *str);
@@ -29,6 +26,10 @@ slidestruct *slidestruct_read_conf (const char *path)
     perror("slidestruct read file open error");
     return NULL;
   }
+
+  slidestruct *head_slidestruct = NULL; // The first slidestruct (returned)
+  slidestruct *current_slidestruct = NULL; // We keep track of the current -
+  imgstruct *current_imgstruct = NULL; // - configuration with these pointers
   
   char *linebuf = NULL;
   size_t buflen = 0; // Updated to hold the length of linebuf.
@@ -102,22 +103,91 @@ slidestruct *slidestruct_read_conf (const char *path)
       printf("slidestruct read error: option %s line %zu ended without"
           " settings\n", opt_start, lineno);
 
-      continue; // Skip this option and move to the next
+      continue; // We do not support options without parameters: skip this opt.
     }
 
+    // Create copy of option for easy use:
     size_t opt_len = opt_end-opt_start;
-
-    // Compare opt_len chars from opt_start to each of the possible options:
-    //TODO
 
     printf("%s\n", linebuf); // TODO: Remove
     printf("option: %.*s\n", (int)opt_len, opt_start);
     printf("setting: %s\n", opt_end+1);
+    
+    // TODO Separate this large thing into a different function. Have each call their own parsing function.
+    // Compare opt_len chars from opt_start to each of the possible options:
+    if (!strncmp(opt_start, "title", opt_len)) {
+      printf("'title' option matched!");
+      //TODO Start a new slidestruct and link to the old one.
+    }
+    else if (!strncmp(opt_start, "title_duration", opt_len)) {
+      printf("'title_duration' option matched!");
+      // TODO
+    }
+    else if (!strncmp(opt_start, "slide_duration", opt_len)) {
+      printf("'slide_duration' option matched!");
+      // TODO
+    }
+    else if (!strncmp(opt_start, "img_name", opt_len)) {
+      printf("'img_name' option matched!");
+      // TODO Start a new image
+    }
+    else if (!strncmp(opt_start, "tint_i", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "tint_f", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "tint_interp", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "tint_duration", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "pos_i", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "pos_f", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "pos_interp", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "pos_duration", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "size_i", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "size_f", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "size_interp", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "size_duration", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "rot_i", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "rot_f", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "rot_interp", opt_len)) {
+      // TODO
+    }
+    else if (!strncmp(opt_start, "rot_duration", opt_len)) {
+      // TODO
+    }
+    else {
+      // Not a supported option
+      printf("slidestruct read error: option %.*s found line %zu is not a"
+          " supported option\n", (int)opt_len, opt_start, lineno);
+      continue;
+    }
 
-    // Check to make sure last char is \n to detect if there are any more lines
-    //   to parse:
-    /*if (linebuf[nchar-1] != '\n')
-      break; // No more lines to parse*/
+    // TODO when doing a new slidestruct, we must clear current_imgstruct. That way we must always have 
+
   }
 
   free(linebuf); // Needs to be freed regardless of error.

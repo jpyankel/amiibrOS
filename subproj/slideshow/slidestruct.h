@@ -82,3 +82,8 @@ typedef struct slidestruct
  * * any malloc or open errors would occur
  */
 slidestruct *slidestruct_read_conf (const char *path);
+
+/**
+ * Frees a given slidestruct, releasing its used memory.
+ */
+void slidestruct_free (slidestruct *ss);
