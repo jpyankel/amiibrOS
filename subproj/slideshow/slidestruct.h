@@ -13,19 +13,23 @@
 #include <stdbool.h>
 #include "raylib.h"
 
+#define INTERP_TYPE_MIN 0
+#define INTERP_TYPE_MAX 10
+
 // Type of interpolation
 typedef enum interp_type
 {
-  NONE = 0,
-  LINEAR = 1,
-  SINE = 2,
-  CIRCULAR = 3,
-  CUBIC = 4,
-  QUADRATIC = 5,
-  EXPONENTIAL = 6,
-  BACK = 7,
-  BOUNCE = 8,
-  ELASTIC = 9,
+  ERROR = 0,
+  NONE = 1,
+  LINEAR = 2,
+  SINE = 3,
+  CIRCULAR = 4,
+  CUBIC = 5,
+  QUADRATIC = 6,
+  EXPONENTIAL = 7,
+  BACK = 8,
+  BOUNCE = 9,
+  ELASTIC = 10,
 } interp_type;
 
 /**
@@ -56,6 +60,8 @@ typedef struct imgstruct
   float rot_f; // final image rotation
   interp_type rot_interp; // rotation interpolation type
   float rot_duration; // duration of the rotation in seconds
+
+  struct imgstruct *next;
 } imgstruct;
 
 /**
@@ -66,7 +72,7 @@ typedef struct slidestruct
   char *title; // Changes corner text displayed when this slidestruct is chosen
   float title_duration; // How long before the title fades out in seconds
   float slide_duration; // slide display time in seconds
-  imgstruct **images; // All imagestructs to be displayed on this slide
+  imgstruct *images; // imagestruct linked list to be displayed on this slide
 
   struct slidestruct *next; // Next slidestruct in the list (can be NULL)
 } slidestruct;
