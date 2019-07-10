@@ -217,12 +217,14 @@ slidestruct *slidestruct_read_conf (const char *path)
       // Copy the setting (img_name) so that we can set the resource path for
       //   the current image:
       size_t img_name_len = strlen(opt_end+1) + 1; // +1 for NUL
+      printf("%s, %zu\n", opt_end+1, img_name_len);
       char *img_name = malloc(img_name_len);
       if (img_name == NULL) {
         perror("slidestruct read malloc error");
         return NULL;
       }
       strncpy(img_name, opt_end+1, img_name_len);
+      printf("%s\n", img_name);
       current_imgstruct->img_name = img_name;
     }
     else if (!strncmp(opt_start, "tint_i", opt_len)) {
@@ -543,14 +545,21 @@ void slidestruct_print(slidestruct *ss)
 void slidestruct_free (slidestruct *ss)
 {
   // Free all slides starting from the head slide.
-  for (slidestruct *s = ss; s != NULL; s = s->next) {
+  slidestruct *s = ss;
+  while (s != NULL) {
     // Free all images starting from the head image.
-    for (imgstruct *i = s->images; i != NULL; i = i->next) {
-      free(i->img_name);
-      free(i);
+    imgstruct *i = s->images;
+    while (i != NULL) {
+      imgstruct *old_i = i;
+      i = i->next;
+      free(old_i->img_name);
+      free(old_i);
     }
-    free(s->title);
-    free(s);
+
+    slidestruct *old_s = s;
+    s = s->next;
+    free(old_s->title);
+    free(old_s);
   }
 }
 
