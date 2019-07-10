@@ -8,9 +8,10 @@
 
 #include <stdio.h> // File handling, fopen, getline, perror
 #include <string.h> // strcat, strncpy, strchr
-#include <stdlib.h> // malloc, NULL, atof
+#include <stdlib.h> // malloc, NULL, strtof, strtoul
 #include <ctype.h> // isspace
 #include <errno.h> // Various error code consts.
+#include <limits.h> // number type limits.
 #include "slidestruct.h" // includes bool type
 #include "slidestruct_defaults.h"
 
@@ -19,8 +20,12 @@ slidestruct *construct_slidestruct (void);
 imgstruct *construct_imgstruct (void);
 bool is_whitespace_str (const char *str);
 const char *first_non_whitespace_char (const char *str);
+bool parse_float(const char *str, float *f);
 bool parse_color(const char *str, Color *color);
+bool parse_vector2 (const char *str, Vector2 *v);
 interp_type parse_interp_type (const char *str);
+
+bool strtouc (unsigned char *c, const char *str, char **endptr, int base);
 // --- ---
 
 slidestruct *slidestruct_read_conf (const char *path)
@@ -96,36 +101,31 @@ slidestruct *slidestruct_read_conf (const char *path)
       continue; // Skip parsing and read next line.
     }
 
-    // To isolate the option name, we search for the index of the first non
-    //   whitespace char and the first space found after this char. The string
-    //   created by the characters in between (including the first char but not
-    //   including the ending space) is our option name.
+    /**
+     * To isolate the option name, we search for the index of the first non
+     *   whitespace char and the first space found after this char. The string
+     *   created by the characters in between (including the first char but not
+     *   including the ending space) is our option name.
+     */
+
     const char *opt_start = first_non_whitespace_char(linebuf);
-    if (opt_start == NULL) { // This can occur if multiple '\\' are 
-      printf("slidestruct read error: no option found line %zu\n", lineno);
+    // Check if the line is just whitespace.
+    if (opt_start == NULL) // This can occur if multiple '\\' are misused.
       continue;
-    }
+
     const char *opt_end = strchr(opt_start, ' ');
-    
     // If there are no spaces after opt_start, then there are no parameters.
     if (opt_end == NULL) {
       printf("slidestruct read error: option %s line %zu ended without"
           " settings\n", opt_start, lineno);
 
-      continue; // We do not support options without parameters: skip this opt.
+      return NULL; // We do not support options without parameters.
     }
 
-    // Create copy of option for easy use:
     size_t opt_len = opt_end-opt_start;
 
-    printf("%s\n", linebuf); // TODO: Remove
-    printf("option: %.*s\n", (int)opt_len, opt_start);
-    printf("setting: %s\n", opt_end+1);
-    
     // Compare opt_len chars from opt_start to each of the possible options:
     if (!strncmp(opt_start, "title", opt_len)) {
-      printf("'title' option matched!");
-      
       // Start a new slidestruct. This means that if a previous one exists, we
       //   must link its images array and set next ptr to the new slidestruct.
       slidestruct *new_ss = construct_slidestruct();
@@ -147,40 +147,54 @@ slidestruct *slidestruct_read_conf (const char *path)
       }
       // The current slidestruct is the newly created one:
       current_slidestruct = new_ss;
+      // Copy the setting (title) so that we can name the slidestruct:
+      size_t title_len = strlen(opt_end+1) + 1; // +1 for NUL
+      char *title = malloc(title_len);
+      if (title == NULL) {
+        perror("slidestruct read malloc error");
+        return NULL;
+      }
+      strncpy(title, opt_end+1, title_len);
+      current_slidestruct->title = title;
+      
     }
     else if (!strncmp(opt_start, "title_duration", opt_len)) {
-      printf("'title_duration' option matched!");
-
       if (current_slidestruct == NULL) {
         // The user has input a title-related option before the 'title' option.
         printf("slidestruct read error: option %s line %zu before a 'title'"
             " option\n", opt_start, lineno);
-        continue; // Ignore this option as it doesn't apply to anything.
+        return NULL;
+      }
+      
+      // Parse setting as float and set the title_duration:
+      float title_duration;
+      if (!parse_float(opt_end+1, &title_duration)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
       }
 
-      // Parse setting as float and set the title_duration:
-      float title_duration = atof(opt_end+1);
       current_slidestruct->title_duration = title_duration;
     }
     else if (!strncmp(opt_start, "slide_duration", opt_len)) {
-      printf("'slide_duration' option matched!");
-
       if (current_slidestruct == NULL) {
         printf("slidestruct read error: option %s line %zu before a 'title'"
             " option\n", opt_start, lineno);
-        continue;
+        return NULL;
       }
 
-      float slide_duration = atof(opt_end+1);
+      float slide_duration;
+      if (!parse_float(opt_end+1, &slide_duration)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+      
       current_slidestruct->slide_duration = slide_duration;
     }
     else if (!strncmp(opt_start, "img_name", opt_len)) {
-      printf("'img_name' option matched!");
-
       if (current_slidestruct == NULL) {
         printf("slidestruct read error: option %s line %zu before a 'title'"
             " option\n", opt_start, lineno);
-        continue;
+        return NULL;
       }
 
       // Start a new imgstruct. This means that if a previous one exists, we
@@ -200,102 +214,271 @@ slidestruct *slidestruct_read_conf (const char *path)
       }
       // The current imgstruct is the newly created one:
       current_imgstruct = new_is;
+      // Copy the setting (img_name) so that we can set the resource path for
+      //   the current image:
+      size_t img_name_len = strlen(opt_end+1) + 1; // +1 for NUL
+      char *img_name = malloc(img_name_len);
+      if (img_name == NULL) {
+        perror("slidestruct read malloc error");
+        return NULL;
+      }
+      strncpy(img_name, opt_end+1, img_name_len);
+      current_imgstruct->img_name = img_name;
     }
     else if (!strncmp(opt_start, "tint_i", opt_len)) {
-      printf("'tint_i' option matched!");
-
       // Ensure that the user specifies an image before changing image
       //   properties
       if (current_imgstruct == NULL) {
         printf("slidestruct read error: option %s line %zu before an"
             " 'img_name' option\n", opt_start, lineno);
-        continue;
+        return NULL;
       }
 
       Color color;
-      if (!parse_color(opt_end+1, &color))
-        continue; // Could not parse. Move on.
+      if (!parse_color(opt_end+1, &color)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
 
       current_imgstruct->tint_i = color;
     }
     else if (!strncmp(opt_start, "tint_f", opt_len)) {
-      printf("'tint_f' option matched!");
-
-      // Ensure that the user specifies an image before changing image
-      //   properties
       if (current_imgstruct == NULL) {
         printf("slidestruct read error: option %s line %zu before an"
-            " 'img_name' option\n", opt_start, lineno);
-        continue;
+               " 'img_name' option\n", opt_start, lineno);
+        return NULL;
       }
 
       Color color;
-      if (!parse_color(opt_end+1, &color))
-        continue; // Could not parse. Move on.
+      if (!parse_color(opt_end+1, &color)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
 
       current_imgstruct->tint_f = color;
     }
     else if (!strncmp(opt_start, "tint_interp", opt_len)) {
-      printf("'tint_interp' option matched!");
       if (current_imgstruct == NULL) {
         printf("slidestruct read error: option %s line %zu before an"
             " 'img_name' option\n", opt_start, lineno);
-        continue;
+        return NULL;
       }
 
       interp_type t = parse_interp_type(opt_end+1);
       if (t == ERROR) {
         printf(" option %s line %zu\n", opt_start, lineno);
+        return NULL;
       }
 
       current_imgstruct->tint_interp = t;
     }
     else if (!strncmp(opt_start, "tint_duration", opt_len)) {
-      // TODO
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+               " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      float tint_duration;
+      if (!parse_float(opt_end+1, &tint_duration)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+      
+      current_imgstruct->tint_duration = tint_duration;
     }
     else if (!strncmp(opt_start, "pos_i", opt_len)) {
-      // TODO
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+               " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      Vector2 pos_i;
+      if (!parse_vector2(opt_end+1, &pos_i)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+
+      current_imgstruct->pos_i = pos_i;
     }
     else if (!strncmp(opt_start, "pos_f", opt_len)) {
-      // TODO
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+               " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      Vector2 pos_f;
+      if (!parse_vector2(opt_end+1, &pos_f)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+
+      current_imgstruct->pos_f = pos_f;
     }
     else if (!strncmp(opt_start, "pos_interp", opt_len)) {
-      // TODO
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+            " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      interp_type t = parse_interp_type(opt_end+1);
+      if (t == ERROR) {
+        printf(" option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+
+      current_imgstruct->pos_interp = t;
     }
     else if (!strncmp(opt_start, "pos_duration", opt_len)) {
-      // TODO
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+               " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      float pos_duration;
+      if (!parse_float(opt_end+1, &pos_duration)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+      
+      current_imgstruct->pos_duration = pos_duration;
     }
     else if (!strncmp(opt_start, "size_i", opt_len)) {
-      // TODO
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+               " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      Vector2 size_i;
+      if (!parse_vector2(opt_end+1, &size_i)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+
+      current_imgstruct->size_i = size_i;
     }
     else if (!strncmp(opt_start, "size_f", opt_len)) {
-      // TODO
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+               " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      Vector2 size_f;
+      if (!parse_vector2(opt_end+1, &size_f)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+
+      current_imgstruct->size_f = size_f;
     }
     else if (!strncmp(opt_start, "size_interp", opt_len)) {
-      // TODO
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+            " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      interp_type t = parse_interp_type(opt_end+1);
+      if (t == ERROR) {
+        printf(" option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+
+      current_imgstruct->size_interp = t;
     }
     else if (!strncmp(opt_start, "size_duration", opt_len)) {
-      // TODO
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+               " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      float size_duration;
+      if (!parse_float(opt_end+1, &size_duration)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+      
+      current_imgstruct->size_duration = size_duration;
     }
     else if (!strncmp(opt_start, "rot_i", opt_len)) {
-      // TODO
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+               " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      float rot_i;
+      if (!parse_float(opt_end+1, &rot_i)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+      
+      current_imgstruct->rot_i = rot_i;
     }
     else if (!strncmp(opt_start, "rot_f", opt_len)) {
-      // TODO
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+               " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      float rot_f;
+      if (!parse_float(opt_end+1, &rot_f)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+      
+      current_imgstruct->rot_f = rot_f;
     }
     else if (!strncmp(opt_start, "rot_interp", opt_len)) {
-      // TODO
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+            " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      interp_type t = parse_interp_type(opt_end+1);
+      if (t == ERROR) {
+        printf(" option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+
+      current_imgstruct->rot_interp = t;
     }
     else if (!strncmp(opt_start, "rot_duration", opt_len)) {
-      // TODO
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+               " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      float rot_duration;
+      if (!parse_float(opt_end+1, &rot_duration)) {
+        printf(" found option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+      
+      current_imgstruct->rot_duration = rot_duration;
     }
     else {
       // Not a supported option
       printf("slidestruct read error: option %.*s found line %zu is not a"
           " supported option\n", (int)opt_len, opt_start, lineno);
-      continue;
+      return NULL;
     }
 
+  }
+
+  // If we exited with an imgstruct left over, we must link it:
+  if (current_head_imgstruct != NULL) {
+    current_slidestruct->images = current_head_imgstruct;
   }
 
   free(linebuf); // Needs to be freed regardless of error.
@@ -314,6 +497,61 @@ slidestruct *slidestruct_read_conf (const char *path)
   }
 
   return head_slidestruct;
+}
+
+void slidestruct_print(slidestruct *ss)
+{
+  for (slidestruct *s = ss; s != NULL; s = s->next) {
+    // Print slide info:
+    printf("title: %s\n", s->title);
+    printf("title_duration: %f\n", s->title_duration);
+    printf("slide_duration: %f\n", s->slide_duration);
+
+    for (imgstruct *i = s->images; i != NULL; i = i->next) {
+      // Print image info:
+      printf("img_name: %s\n", i->img_name);
+
+      Color color = i->tint_i;
+      printf("tint_i: (%d, %d, %d, %d)\n", color.r, color.g, color.b, color.a);
+      color = i->tint_f;
+      printf("tint_f: (%d, %d, %d, %d)\n", color.r, color.g, color.b, color.a);
+      printf("tint_interp: %d\n", i->tint_interp);
+      printf("tint_duration: %f\n", i->tint_duration);
+
+      Vector2 vec2 = i->pos_i;
+      printf("pos_i: (%f, %f)\n", vec2.x, vec2.y);
+      vec2 = i->pos_f;
+      printf("pos_f: (%f, %f)\n", vec2.x, vec2.y);
+      printf("pos_interp: %d\n", i->pos_interp);
+      printf("pos_duration: %f\n", i->pos_duration);
+
+      vec2 = i->size_i;
+      printf("size_i: (%f, %f)\n", vec2.x, vec2.y);
+      vec2 = i->size_f;
+      printf("size_f: (%f, %f)\n", vec2.x, vec2.y);
+      printf("size_interp: %d\n", i->size_interp);
+      printf("size_duration: %f\n", i->size_duration);
+
+      printf("rot_i: %f\n", i->rot_i);
+      printf("rot_f: %f\n", i->rot_f);
+      printf("rot_interp: %d\n", i->rot_interp);
+      printf("rot_duration: %f\n", i->rot_duration);
+    }
+  }
+}
+
+void slidestruct_free (slidestruct *ss)
+{
+  // Free all slides starting from the head slide.
+  for (slidestruct *s = ss; s != NULL; s = s->next) {
+    // Free all images starting from the head image.
+    for (imgstruct *i = s->images; i != NULL; i = i->next) {
+      free(i->img_name);
+      free(i);
+    }
+    free(s->title);
+    free(s);
+  }
 }
 
 /**
@@ -415,6 +653,24 @@ const char *first_non_whitespace_char (const char *str)
 }
 
 /**
+ * Populates the float argument f with the float extracted from string str.
+ * Returns true if successful, false if not.
+ */
+bool parse_float(const char *str, float *f)
+{
+  char *endptr;
+  *f = strtof(str, &endptr);
+  if (str == endptr || endptr == NULL
+      || (*endptr != '\0' && !isspace(*endptr))) {
+    // An error occured in parsing.
+    printf("slidestruct read error: float could not be parsed from string %s",
+        str);
+    return false;
+  }
+  return true;
+}
+
+/**
  * Populates the color argument with the color extracted from string str using
  *   the following rules:
  * The str should appear like so: "(r,g,b,a)" where r, g, b, a are to be parsed
@@ -427,15 +683,124 @@ const char *first_non_whitespace_char (const char *str)
 bool parse_color(const char *str, Color *color)
 {
   // Find the '('.
-  // TODO
+  const char *sett_start = first_non_whitespace_char(str);
+  if (*sett_start != '(') {
+    printf("slidestruct read error: malformed color. Found '%c' before '('",
+        *sett_start);
+    return false;
+  }
+
+  unsigned char rgba[4];
+
   // Take all chars up to the first ','
-  // TODO
   // Take all chars after the first ',' up to the second ','
-  // TODO
   // Take all chars after the second ',' up to the third ','
-  // TODO
   // Take all chars after the third ',' up to the ending ')'
-  // TODO
+  char *endptr;
+  for (size_t idx = 0; idx < 4; idx++) {
+    unsigned char convert;
+    bool no_overflow = true;
+    if (idx == 0)
+      no_overflow = strtouc(&convert, sett_start+1, &endptr, 10);
+    else {
+      const char *new_str = endptr+1;
+      no_overflow = strtouc(&convert, new_str, &endptr, 10);
+    }
+
+    // Error checking
+    if (!no_overflow) {
+      // The number was too large.
+      printf("slidestruct read error: malformed color. Entry %zu too "
+          "large - must be in range [0, 255]. Error", idx);
+      return false;
+    }
+    else if (str == endptr) {
+      // The string didn't start with a number.
+      printf("slidestruct read error: malformed color. Entry %zu did not start"
+          " with a number. Error", idx);
+      return false;
+    }
+    else if (idx != 3 && *endptr != ',') {
+      // The string is malformed. The number should have an ',' after it.
+      printf("slidestruct read error: malformed color. Character after entry "
+          "%zu must be a ','. Error", idx);
+      return false;
+    }
+    else if (idx == 3 && *endptr != ')') {
+      // The string is malformed. The string should end in a ')'.
+      printf("slidestruct read error: malformed color. Character after entry "
+          "%zu must be a ')'. Error", idx);
+      return false;
+    }
+
+    // Save the converted value
+    rgba[idx] = convert;
+  }
+
+  *color = (Color){rgba[0], rgba[1], rgba[2], rgba[3]};
+  return true;
+}
+
+/**
+ * Populates the color argument with the color extracted from string str using
+ *   the following rules:
+ * The str should appear like so: "(x,y)" where x and y are string
+ *   representations of floats.
+ *
+ * If parsing is successful, then true is returned.
+ * If any parsing fails, then returns false.
+ * If the parsing would fail, this function prints an error message.
+ */
+bool parse_vector2 (const char *str, Vector2 *v)
+{
+  // Find the '('.
+  const char *sett_start = first_non_whitespace_char(str);
+  if (*sett_start != '(') {
+    printf("slidestruct read error: malformed Vector2. Found '%c' before '('",
+        *sett_start);
+    return false;
+  }
+
+  float xy[2];
+
+  // Take all chars up to the first ','
+  // Take all chars after the first ',' up to the ')'
+  char *endptr;
+  for (size_t idx = 0; idx < 2; idx++) {
+    float convert;
+    if (idx == 0)
+      convert = strtof(sett_start+1, &endptr);
+    else {
+      const char *new_str = endptr+1;
+      convert = strtof(new_str, &endptr);
+    }
+
+    // Error checking
+    if (str == endptr) {
+      // The string didn't start with a number.
+      printf("slidestruct read error: malformed color. Entry %zu did not start"
+          " with a number. Error", idx);
+      return false;
+    }
+    else if (idx == 0 && *endptr != ',') {
+      // The string is malformed. The number should have an ',' after it.
+      printf("slidestruct read error: malformed color. Character after entry "
+          "%zu must be a ','. Error", idx);
+      return false;
+    }
+    else if (idx == 1 && *endptr != ')') {
+      // The string is malformed. The string should end in a ')'.
+      printf("slidestruct read error: malformed color. Character after entry "
+          "%zu must be a ')'. Error", idx);
+      return false;
+    }
+
+    // Save the converted value
+    xy[idx] = convert;
+  }
+
+  *v = (Vector2){xy[0], xy[1]};
+  return true;
 }
 
 /**
@@ -453,4 +818,20 @@ interp_type parse_interp_type (const char *str)
     return ERROR;
   }
   return (interp_type)interp;
+}
+
+/**
+ * Parses str via strtoul and returns true if successful in converting its
+ *   result to a unsigned char.
+ * Returns false if the converted value would overflow when converted to an
+ *   unsigned char.
+ */
+bool strtouc (unsigned char *c, const char *str, char **endptr, int base)
+{
+  unsigned long l = strtoul(str, endptr, base);
+  if (l > UCHAR_MAX) {
+    return false;
+  }
+  *c = (unsigned char)l;
+  return true;
 }

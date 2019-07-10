@@ -4,8 +4,8 @@
  * Contains prototypes for the slidestruct object.
  *
  * The slidestruct is a singly-linked-list entry representing one slide in the
- *   slideshow. One slidestruct contains multiple imgstructs. Each imgstruct
- *   represents an image in that slide.
+ *   slideshow. A slidestruct contains a linked list of imgstructs. Each
+ *   imgstruct represents an image in that slide.
  *
  * Joseph Yankel (jpyankel@gmail.com)
  */
@@ -86,8 +86,14 @@ typedef struct slidestruct
  * * path is invalid
  * * the text data at path is malformed
  * * any malloc or open errors would occur
+ *
+ * If an error occurs, info is printed to stdout. Otherwise, this function runs
+ *   silently.
  */
 slidestruct *slidestruct_read_conf (const char *path);
+
+// Prints every parameter of every image in every slide from given slidestruct
+void slidestruct_print(slidestruct *ss);
 
 /**
  * Frees a given slidestruct, releasing its used memory.
