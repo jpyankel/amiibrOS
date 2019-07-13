@@ -22,9 +22,14 @@
 Texture2D *load_slide_textures(slidestruct *current_slide,
                                size_t *textures_len);
 void unload_slide_textures (Texture2D *textures, size_t textures_len);
+void interp_pos (imgstruct *opts, Rectangle *destRec, float timeElapsed);
+void interp_size (imgstruct *opts, Rectangle *destRec, float timeElapsed);
+void interp_rot (imgstruct *opts, float *rot, float timeElapsed);
+void interp_tint (imgstruct *opts, Color *color, float timeElapsed);
 // ===========================
 
-int main (void) {
+int main (void)
+{
   // Read slidestruct 
   slidestruct *ss = slidestruct_read_conf("conf.txt");
   if (ss == NULL)
@@ -64,42 +69,10 @@ int main (void) {
       float rot;
       Color tint;
 
-      // Interpolate position:
-      switch (opts->pos_interp) {
-        case NONE:
-          destRec.x = opts->pos_i.x;
-          destRec.y = opts->pos_i.y;
-          break;
-        case LINEAR:
-          destRec.x = EaseLinearInOut(timeElapsed, opts->pos_i.x,
-                                      opts->pos_f.x, opts->pos_duration);
-          destRec.y = EaseLinearInOut(timeElapsed, opts->pos_i.y,
-                                      opts->pos_f.y, opts->pos_duration);
-          break;
-        // TODO Other cases
-        default: break;
-      }
-      // Interpolate size:
-      switch (opts->size_interp) {
-        case NONE:
-          destRec.width = opts->size_i.x;
-          destRec.height = opts->size_i.y;
-          break;
-        case LINEAR:
-          destRec.width = EaseLinearInOut(timeElapsed, opts->size_i.x,
-                                          opts->size_f.x, opts->size_duration);
-          destRec.height = EaseLinearInOut(timeElapsed, opts->size_i.y,
-                                           opts->size_f.y,
-                                           opts->size_duration);
-          break;
-        // TODO Other cases
-        default: break;
-      }
-      // Interpolate rotation:
-      rot = 0; // TODO Implement for real
-      // Interpolate tint:
-      // TODO Also avoid calculating anything not useful!
-      tint = WHITE; // TODO Implement for real
+      interp_pos(opts, &destRec, (float)timeElapsed); // Interpolate position
+      interp_size(opts, &destRec, (float)timeElapsed); // Interpolate size
+      interp_rot(opts, &rot, (float)timeElapsed); // Interpolate rotation
+      interp_tint(opts, &tint, (float)timeElapsed); // Interpolate tint color
 
       // Draw:
       // Treat origin as centered: TODO Possible option per image!!!
@@ -178,4 +151,349 @@ void unload_slide_textures (Texture2D *textures, size_t textures_len)
     UnloadTexture(textures[idx]);
   }
   free(textures);
+}
+
+/**
+ * Interpolates the position variables of the given destRec rectangle according
+ *   to the method specified by the interp_type and interp_captype in the given
+ *   imgstruct 'opts'.
+ */
+void interp_pos (imgstruct *opts, Rectangle *destRec, float timeElapsed)
+{
+  // First, search for the interp_func based on user preferences (opt)
+  float (*interp_func)(float, float, float, float) = NULL;
+  switch (opts->pos_interp) {
+    case NONE:
+      destRec->x = opts->pos_i.x;
+      destRec->y = opts->pos_i.y;
+      break;
+    case LINEAR:
+      switch (opts->pos_interp_captype) {
+        case IN: interp_func = &EaseLinearIn; break;
+        case OUT: interp_func = &EaseLinearOut; break;
+        case INOUT: interp_func = &EaseLinearInOut; break;
+      }
+      break;
+    case SINE:
+      switch (opts->pos_interp_captype) {
+        case IN: interp_func = &EaseSineIn; break;
+        case OUT: interp_func = &EaseSineOut; break;
+        case INOUT: interp_func = &EaseSineInOut; break;
+      }
+      break;
+    case CIRCULAR:
+      switch (opts->pos_interp_captype) {
+        case IN: interp_func = &EaseCircIn; break;
+        case OUT: interp_func = &EaseCircOut; break;
+        case INOUT: interp_func = &EaseCircInOut; break;
+      }
+      break;
+    case CUBIC:
+      switch (opts->pos_interp_captype) {
+        case IN: interp_func = &EaseCubicIn; break;
+        case OUT: interp_func = &EaseCubicOut; break;
+        case INOUT: interp_func = &EaseCubicInOut; break;
+      }
+      break;
+    case QUADRATIC:
+      switch (opts->pos_interp_captype) {
+        case IN: interp_func = &EaseQuadIn; break;
+        case OUT: interp_func = &EaseQuadOut; break;
+        case INOUT: interp_func = &EaseQuadInOut; break;
+      }
+      break;
+    case EXPONENTIAL:
+      switch (opts->pos_interp_captype) {
+        case IN: interp_func = &EaseExpoIn; break;
+        case OUT: interp_func = &EaseExpoOut; break;
+        case INOUT: interp_func = &EaseExpoInOut; break;
+      }
+      break;
+    case BACK:
+      switch (opts->pos_interp_captype) {
+        case IN: interp_func = &EaseBackIn; break;
+        case OUT: interp_func = &EaseBackOut; break;
+        case INOUT: interp_func = &EaseBackInOut; break;
+      }
+      break;
+    case BOUNCE:
+      switch (opts->pos_interp_captype) {
+        case IN: interp_func = &EaseBounceIn; break;
+        case OUT: interp_func = &EaseBounceOut; break;
+        case INOUT: interp_func = &EaseBounceInOut; break;
+      }
+      break;
+    case ELASTIC:
+      switch (opts->pos_interp_captype) {
+        case IN: interp_func = &EaseElasticIn; break;
+        case OUT: interp_func = &EaseElasticOut; break;
+        case INOUT: interp_func = &EaseElasticInOut; break;
+      }
+      break;
+  }
+  if (interp_func != NULL) { // If we found an interp function...
+    // ...use the function to interpolate the target values:
+    destRec->x = (*interp_func)(timeElapsed, opts->pos_i.x, opts->pos_f.x,
+                                opts->pos_duration);
+    destRec->y = (*interp_func)(timeElapsed, opts->pos_i.y,
+                                opts->pos_f.y, opts->pos_duration);
+  } // Else, we leave it alone (because the user picked NONE).
+}
+
+/**
+ * Interpolates the size variables of the given destRec rectangle according to
+ *   the method specified by the interp_type and interp_captype given.
+ */
+void interp_size (imgstruct *opts, Rectangle *destRec, float timeElapsed)
+{
+  // First, search for the interp_func based on user preferences (opt)
+  float (*interp_func)(float, float, float, float) = NULL;
+  switch (opts->size_interp) {
+    case NONE:
+      destRec->width = opts->size_i.x;
+      destRec->height = opts->size_i.y;
+      break;
+    case LINEAR:
+      switch (opts->size_interp_captype) {
+        case IN: interp_func = &EaseLinearIn; break;
+        case OUT: interp_func = &EaseLinearOut; break;
+        case INOUT: interp_func = &EaseLinearInOut; break;
+      }
+      break;
+    case SINE:
+      switch (opts->size_interp_captype) {
+        case IN: interp_func = &EaseSineIn; break;
+        case OUT: interp_func = &EaseSineOut; break;
+        case INOUT: interp_func = &EaseSineInOut; break;
+      }
+      break;
+    case CIRCULAR:
+      switch (opts->size_interp_captype) {
+        case IN: interp_func = &EaseCircIn; break;
+        case OUT: interp_func = &EaseCircOut; break;
+        case INOUT: interp_func = &EaseCircInOut; break;
+      }
+      break;
+    case CUBIC:
+      switch (opts->size_interp_captype) {
+        case IN: interp_func = &EaseCubicIn; break;
+        case OUT: interp_func = &EaseCubicOut; break;
+        case INOUT: interp_func = &EaseCubicInOut; break;
+      }
+      break;
+    case QUADRATIC:
+      switch (opts->size_interp_captype) {
+        case IN: interp_func = &EaseQuadIn; break;
+        case OUT: interp_func = &EaseQuadOut; break;
+        case INOUT: interp_func = &EaseQuadInOut; break;
+      }
+      break;
+    case EXPONENTIAL:
+      switch (opts->size_interp_captype) {
+        case IN: interp_func = &EaseExpoIn; break;
+        case OUT: interp_func = &EaseExpoOut; break;
+        case INOUT: interp_func = &EaseExpoInOut; break;
+      }
+      break;
+    case BACK:
+      switch (opts->size_interp_captype) {
+        case IN: interp_func = &EaseBackIn; break;
+        case OUT: interp_func = &EaseBackOut; break;
+        case INOUT: interp_func = &EaseBackInOut; break;
+      }
+      break;
+    case BOUNCE:
+      switch (opts->size_interp_captype) {
+        case IN: interp_func = &EaseBounceIn; break;
+        case OUT: interp_func = &EaseBounceOut; break;
+        case INOUT: interp_func = &EaseBounceInOut; break;
+      }
+      break;
+    case ELASTIC:
+      switch (opts->size_interp_captype) {
+        case IN: interp_func = &EaseElasticIn; break;
+        case OUT: interp_func = &EaseElasticOut; break;
+        case INOUT: interp_func = &EaseElasticInOut; break;
+      }
+      break;
+  }
+  if (interp_func != NULL) { // If we found an interp function...
+    // ...use the function to interpolate the target values:
+    destRec->width = (*interp_func)(timeElapsed, opts->size_i.x,
+                                    opts->size_f.x, opts->size_duration);
+    destRec->height = (*interp_func)(timeElapsed, opts->size_i.y,
+                                     opts->size_f.y, opts->size_duration);
+  } // Else, we leave it alone (because the user picked NONE).
+}
+
+/**
+ * Interpolates the rotation variable given according to the method specified
+ *   by opts.
+ */
+void interp_rot (imgstruct *opts, float *rot, float timeElapsed)
+{
+  // First, search for the interp_func based on user preferences (opt)
+  float (*interp_func)(float, float, float, float) = NULL;
+  switch (opts->rot_interp) {
+    case NONE:
+      *rot = opts->rot_i;
+      break;
+    case LINEAR:
+      switch (opts->rot_interp_captype) {
+        case IN: interp_func = &EaseLinearIn; break;
+        case OUT: interp_func = &EaseLinearOut; break;
+        case INOUT: interp_func = &EaseLinearInOut; break;
+      }
+      break;
+    case SINE:
+      switch (opts->rot_interp_captype) {
+        case IN: interp_func = &EaseSineIn; break;
+        case OUT: interp_func = &EaseSineOut; break;
+        case INOUT: interp_func = &EaseSineInOut; break;
+      }
+      break;
+    case CIRCULAR:
+      switch (opts->rot_interp_captype) {
+        case IN: interp_func = &EaseCircIn; break;
+        case OUT: interp_func = &EaseCircOut; break;
+        case INOUT: interp_func = &EaseCircInOut; break;
+      }
+      break;
+    case CUBIC:
+      switch (opts->rot_interp_captype) {
+        case IN: interp_func = &EaseCubicIn; break;
+        case OUT: interp_func = &EaseCubicOut; break;
+        case INOUT: interp_func = &EaseCubicInOut; break;
+      }
+      break;
+    case QUADRATIC:
+      switch (opts->rot_interp_captype) {
+        case IN: interp_func = &EaseQuadIn; break;
+        case OUT: interp_func = &EaseQuadOut; break;
+        case INOUT: interp_func = &EaseQuadInOut; break;
+      }
+      break;
+    case EXPONENTIAL:
+      switch (opts->rot_interp_captype) {
+        case IN: interp_func = &EaseExpoIn; break;
+        case OUT: interp_func = &EaseExpoOut; break;
+        case INOUT: interp_func = &EaseExpoInOut; break;
+      }
+      break;
+    case BACK:
+      switch (opts->rot_interp_captype) {
+        case IN: interp_func = &EaseBackIn; break;
+        case OUT: interp_func = &EaseBackOut; break;
+        case INOUT: interp_func = &EaseBackInOut; break;
+      }
+      break;
+    case BOUNCE:
+      switch (opts->rot_interp_captype) {
+        case IN: interp_func = &EaseBounceIn; break;
+        case OUT: interp_func = &EaseBounceOut; break;
+        case INOUT: interp_func = &EaseBounceInOut; break;
+      }
+      break;
+    case ELASTIC:
+      switch (opts->rot_interp_captype) {
+        case IN: interp_func = &EaseElasticIn; break;
+        case OUT: interp_func = &EaseElasticOut; break;
+        case INOUT: interp_func = &EaseElasticInOut; break;
+      }
+      break;
+  }
+  if (interp_func != NULL) { // If we found an interp function...
+    // ...use the function to interpolate the target values:
+    *rot = (*interp_func)(timeElapsed, opts->rot_i, opts->rot_f,
+                          opts->rot_duration);
+  } // Else, we leave it alone (because the user picked NONE).
+}
+
+/**
+ * Interpolates the tint color variable given according to the method specified
+ *   by opts.
+ */
+void interp_tint (imgstruct *opts, Color *color, float timeElapsed)
+{
+  // First, search for the interp_func based on user preferences (opt)
+  float (*interp_func)(float, float, float, float) = NULL;
+  switch (opts->tint_interp) {
+    case NONE:
+      *color = opts->tint_i;
+      break;
+    case LINEAR:
+      switch (opts->tint_interp_captype) {
+        case IN: interp_func = &EaseLinearIn; break;
+        case OUT: interp_func = &EaseLinearOut; break;
+        case INOUT: interp_func = &EaseLinearInOut; break;
+      }
+      break;
+    case SINE:
+      switch (opts->tint_interp_captype) {
+        case IN: interp_func = &EaseSineIn; break;
+        case OUT: interp_func = &EaseSineOut; break;
+        case INOUT: interp_func = &EaseSineInOut; break;
+      }
+      break;
+    case CIRCULAR:
+      switch (opts->tint_interp_captype) {
+        case IN: interp_func = &EaseCircIn; break;
+        case OUT: interp_func = &EaseCircOut; break;
+        case INOUT: interp_func = &EaseCircInOut; break;
+      }
+      break;
+    case CUBIC:
+      switch (opts->tint_interp_captype) {
+        case IN: interp_func = &EaseCubicIn; break;
+        case OUT: interp_func = &EaseCubicOut; break;
+        case INOUT: interp_func = &EaseCubicInOut; break;
+      }
+      break;
+    case QUADRATIC:
+      switch (opts->tint_interp_captype) {
+        case IN: interp_func = &EaseQuadIn; break;
+        case OUT: interp_func = &EaseQuadOut; break;
+        case INOUT: interp_func = &EaseQuadInOut; break;
+      }
+      break;
+    case EXPONENTIAL:
+      switch (opts->tint_interp_captype) {
+        case IN: interp_func = &EaseExpoIn; break;
+        case OUT: interp_func = &EaseExpoOut; break;
+        case INOUT: interp_func = &EaseExpoInOut; break;
+      }
+      break;
+    case BACK:
+      switch (opts->tint_interp_captype) {
+        case IN: interp_func = &EaseBackIn; break;
+        case OUT: interp_func = &EaseBackOut; break;
+        case INOUT: interp_func = &EaseBackInOut; break;
+      }
+      break;
+    case BOUNCE:
+      switch (opts->tint_interp_captype) {
+        case IN: interp_func = &EaseBounceIn; break;
+        case OUT: interp_func = &EaseBounceOut; break;
+        case INOUT: interp_func = &EaseBounceInOut; break;
+      }
+      break;
+    case ELASTIC:
+      switch (opts->tint_interp_captype) {
+        case IN: interp_func = &EaseElasticIn; break;
+        case OUT: interp_func = &EaseElasticOut; break;
+        case INOUT: interp_func = &EaseElasticInOut; break;
+      }
+      break;
+  }
+  if (interp_func != NULL) { // If we found an interp function...
+    // ...use the function to interpolate the target values:
+    color->r = (*interp_func)(timeElapsed, opts->tint_i.r, opts->tint_f.r,
+                              opts->tint_duration);
+    color->g = (*interp_func)(timeElapsed, opts->tint_i.g, opts->tint_f.g,
+                              opts->tint_duration);
+    color->b = (*interp_func)(timeElapsed, opts->tint_i.b, opts->tint_f.b,
+                              opts->tint_duration);
+    color->a = (*interp_func)(timeElapsed, opts->tint_i.a, opts->tint_f.a,
+                              opts->tint_duration);
+  } // Else, we leave it alone (because the user picked NONE).
 }
