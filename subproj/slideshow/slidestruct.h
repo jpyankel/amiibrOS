@@ -13,24 +13,31 @@
 #include <stdbool.h>
 #include "raylib.h"
 
-#define INTERP_TYPE_MIN 0
-#define INTERP_TYPE_MAX 10
+#define INTERP_TYPE_MAX 9
+
+#define INTERP_CAPTYPE_MAX 2
 
 // Type of interpolation
 typedef enum interp_type
 {
-  ERROR = 0,
-  NONE = 1,
-  LINEAR = 2,
-  SINE = 3,
-  CIRCULAR = 4,
-  CUBIC = 5,
-  QUADRATIC = 6,
-  EXPONENTIAL = 7,
-  BACK = 8,
-  BOUNCE = 9,
-  ELASTIC = 10,
+  NONE = 0,
+  LINEAR = 1,
+  SINE = 2,
+  CIRCULAR = 3,
+  CUBIC = 4,
+  QUADRATIC = 5,
+  EXPONENTIAL = 6,
+  BACK = 7,
+  BOUNCE = 8,
+  ELASTIC = 9,
 } interp_type;
+
+typedef enum interp_captype
+{
+  IN = 0,
+  OUT = 1,
+  INOUT = 2,
+} interp_captype;
 
 /**
  * Container for image information. A slidestruct contains an array of these so
@@ -44,21 +51,25 @@ typedef struct imgstruct
   Color tint_i; // initial image tint color
   Color tint_f; // final image tint color
   interp_type tint_interp; // image tint interpolation type
+  interp_captype tint_interp_captype; // interp beginning/ending behaviour
   float tint_duration; // duration of the tint color transition in seconds
   
   Vector2 pos_i; // initial image position
   Vector2 pos_f; // final image position
   interp_type pos_interp; // image position interpolation type
+  interp_captype pos_interp_captype;
   float pos_duration; // duration of the position transform in seconds
   
   Vector2 size_i; // initial image size
   Vector2 size_f; // final image size
   interp_type size_interp; // size interpolation type
+  interp_captype size_interp_captype;
   float size_duration; // duration of the size change in seconds
   
   float rot_i; // initial image rotation
   float rot_f; // final image rotation
   interp_type rot_interp; // rotation interpolation type
+  interp_captype rot_interp_captype;
   float rot_duration; // duration of the rotation in seconds
 
   struct imgstruct *next;

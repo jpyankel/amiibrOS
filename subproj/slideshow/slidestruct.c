@@ -13,8 +13,7 @@
 #include <errno.h> // Various error code consts.
 #include <limits.h> // number type limits.
 #include "slidestruct.h" // includes bool type
-#include "slidestruct_defaults.h"
-
+#include "slidestruct_defaults.h" 
 // --- Helper Function Prototypes ---
 slidestruct *construct_slidestruct (void);
 imgstruct *construct_imgstruct (void);
@@ -23,7 +22,8 @@ const char *first_non_whitespace_char (const char *str);
 bool parse_float(const char *str, float *f);
 bool parse_color(const char *str, Color *color);
 bool parse_vector2 (const char *str, Vector2 *v);
-interp_type parse_interp_type (const char *str);
+bool parse_interp_type (const char *str, interp_type *type);
+bool parse_interp_captype (const char *str, interp_captype *captype);
 
 bool strtouc (unsigned char *c, const char *str, char **endptr, int base);
 // --- ---
@@ -267,13 +267,28 @@ slidestruct *slidestruct_read_conf (const char *path)
         return NULL;
       }
 
-      interp_type t = parse_interp_type(opt_end+1);
-      if (t == ERROR) {
+      interp_type t;
+      if (!parse_interp_type(opt_end+1, &t)) {
         printf(" option %s line %zu\n", opt_start, lineno);
         return NULL;
       }
 
       current_imgstruct->tint_interp = t;
+    }
+    else if (!strncmp(opt_start, "tint_interp_captype", opt_len)) {
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+            " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      interp_captype t;
+      if (!parse_interp_captype(opt_end+1, &t)) {
+        printf(" option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+
+      current_imgstruct->tint_interp_captype = t;
     }
     else if (!strncmp(opt_start, "tint_duration", opt_len)) {
       if (current_imgstruct == NULL) {
@@ -327,13 +342,28 @@ slidestruct *slidestruct_read_conf (const char *path)
         return NULL;
       }
 
-      interp_type t = parse_interp_type(opt_end+1);
-      if (t == ERROR) {
+      interp_type t;
+      if (!parse_interp_type(opt_end+1, &t)) {
         printf(" option %s line %zu\n", opt_start, lineno);
         return NULL;
       }
 
       current_imgstruct->pos_interp = t;
+    }
+    else if (!strncmp(opt_start, "pos_interp_captype", opt_len)) {
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+            " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      interp_captype t;
+      if (!parse_interp_captype(opt_end+1, &t)) {
+        printf(" option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+
+      current_imgstruct->pos_interp_captype = t;
     }
     else if (!strncmp(opt_start, "pos_duration", opt_len)) {
       if (current_imgstruct == NULL) {
@@ -387,13 +417,28 @@ slidestruct *slidestruct_read_conf (const char *path)
         return NULL;
       }
 
-      interp_type t = parse_interp_type(opt_end+1);
-      if (t == ERROR) {
+      interp_type t;
+      if (!parse_interp_type(opt_end+1, &t)) {
         printf(" option %s line %zu\n", opt_start, lineno);
         return NULL;
       }
 
       current_imgstruct->size_interp = t;
+    }
+    else if (!strncmp(opt_start, "size_interp_captype", opt_len)) {
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+            " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      interp_captype t;
+      if (!parse_interp_captype(opt_end+1, &t)) {
+        printf(" option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+
+      current_imgstruct->size_interp_captype = t;
     }
     else if (!strncmp(opt_start, "size_duration", opt_len)) {
       if (current_imgstruct == NULL) {
@@ -447,13 +492,28 @@ slidestruct *slidestruct_read_conf (const char *path)
         return NULL;
       }
 
-      interp_type t = parse_interp_type(opt_end+1);
-      if (t == ERROR) {
+      interp_type t;
+      if (!parse_interp_type(opt_end+1, &t)) {
         printf(" option %s line %zu\n", opt_start, lineno);
         return NULL;
       }
 
       current_imgstruct->rot_interp = t;
+    }
+    else if (!strncmp(opt_start, "rot_interp_captype", opt_len)) {
+      if (current_imgstruct == NULL) {
+        printf("slidestruct read error: option %s line %zu before an"
+            " 'img_name' option\n", opt_start, lineno);
+        return NULL;
+      }
+
+      interp_captype t;
+      if (!parse_interp_captype(opt_end+1, &t)) {
+        printf(" option %s line %zu\n", opt_start, lineno);
+        return NULL;
+      }
+
+      current_imgstruct->rot_interp_captype = t;
     }
     else if (!strncmp(opt_start, "rot_duration", opt_len)) {
       if (current_imgstruct == NULL) {
@@ -518,7 +578,8 @@ void slidestruct_print(slidestruct *ss)
       printf("tint_i: (%d, %d, %d, %d)\n", color.r, color.g, color.b, color.a);
       color = i->tint_f;
       printf("tint_f: (%d, %d, %d, %d)\n", color.r, color.g, color.b, color.a);
-      printf("tint_interp: %d\n", i->tint_interp);
+      printf("tint_interp: %u\n", i->tint_interp);
+      printf("tint_interp_captype: %u\n", i->tint_interp_captype);
       printf("tint_duration: %f\n", i->tint_duration);
 
       Vector2 vec2 = i->pos_i;
@@ -526,6 +587,7 @@ void slidestruct_print(slidestruct *ss)
       vec2 = i->pos_f;
       printf("pos_f: (%f, %f)\n", vec2.x, vec2.y);
       printf("pos_interp: %d\n", i->pos_interp);
+      printf("pos_interp_captype: %u\n", i->pos_interp_captype);
       printf("pos_duration: %f\n", i->pos_duration);
 
       vec2 = i->size_i;
@@ -533,11 +595,13 @@ void slidestruct_print(slidestruct *ss)
       vec2 = i->size_f;
       printf("size_f: (%f, %f)\n", vec2.x, vec2.y);
       printf("size_interp: %d\n", i->size_interp);
+      printf("size_interp_captype: %u\n", i->size_interp_captype);
       printf("size_duration: %f\n", i->size_duration);
 
       printf("rot_i: %f\n", i->rot_i);
       printf("rot_f: %f\n", i->rot_f);
       printf("rot_interp: %d\n", i->rot_interp);
+      printf("rot_interp_captype: %u\n", i->rot_interp_captype);
       printf("rot_duration: %f\n", i->rot_duration);
     }
   }
@@ -606,18 +670,22 @@ imgstruct *construct_imgstruct (void)
   new_is->tint_i = TINT_I_DEFAULT;
   new_is->tint_f = TINT_F_DEFAULT;
   new_is->tint_interp = TINT_INTERP_DEFAULT;
+  new_is->tint_interp_captype = TINT_INTERP_CAPTYPE_DEFAULT;
   new_is->tint_duration = TINT_DURATION_DEFAULT;
   new_is->pos_i = POS_I_DEFAULT;
   new_is->pos_f = POS_F_DEFAULT;
   new_is->pos_interp = POS_INTERP_DEFAULT;
+  new_is->pos_interp_captype = POS_INTERP_CAPTYPE_DEFAULT;
   new_is->pos_duration = POS_DURATION_DEFAULT;
   new_is->size_i = SIZE_I_DEFAULT;
   new_is->size_f = SIZE_F_DEFAULT;
   new_is->size_interp = SIZE_INTERP_DEFAULT;
+  new_is->size_interp_captype = SIZE_INTERP_CAPTYPE_DEFAULT;
   new_is->size_duration = SIZE_DURATION_DEFAULT;
   new_is->rot_i = ROT_I_DEFAULT;
   new_is->rot_f = ROT_F_DEFAULT;
   new_is->rot_interp = ROT_INTERP_DEFAULT;
+  new_is->rot_interp_captype = ROT_INTERP_CAPTYPE_DEFAULT;
   new_is->rot_duration = ROT_DURATION_DEFAULT;
   new_is->next = NULL;
   return new_is;
@@ -814,20 +882,78 @@ bool parse_vector2 (const char *str, Vector2 *v)
 }
 
 /**
- * Returns the interp_type parsed from string str. If an error would occur,
- *   this returns interp_type.ERROR
+ * Returns if successfully parsed the interp_type from string str. If an error
+ *   would occur, this returns false. The parsed interp_type is stored in the
+ *   given interp_type pointer 'type'
  * 
  * If the parsing would fail, this function prints an error message without a
  *   newline.
  */
-interp_type parse_interp_type (const char *str)
+bool parse_interp_type (const char *str, interp_type *type)
 {
-  int interp = atoi(str);
-  if (interp < INTERP_TYPE_MIN || interp > INTERP_TYPE_MAX) {
-    printf("slidestruct read error: parsed value %d out of range", interp);
-    return ERROR;
+  char *endptr;
+  unsigned char t;
+  if (!strtouc(&t, str, &endptr, 10)) {
+    // The number was too large.
+    printf("slidestruct read error: malformed interp type. Specified type too "
+        "large - must be in range [0, %u]. Error", UCHAR_MAX);
+    return false;
   }
-  return (interp_type)interp;
+  else if (str == endptr) {
+    // The string didn't start with a number.
+    printf("slidestruct read error: malformed interp type. Specified type did "
+        "not start with a number. Error");
+    return false;
+  }
+  else if (*endptr != '\n') {
+    printf("slidestruct read error: malformed interp type. Specified type did "
+        "not contain only a number. Error");
+    return false;
+  }
+  else if (t > INTERP_TYPE_MAX) {
+    printf("slidestruct read error: parsed value %u out of range", t);
+    return false;
+  }
+
+  *type = (interp_type)t;
+  return true;
+}
+
+/**
+ * Returns true if the interp_captype parsed from string str is valid.
+ * If an error would occur, this returns false.
+ * 
+ * If the parsing would fail, this function prints an error message without a
+ *   newline.
+ */
+bool parse_interp_captype (const char *str, interp_captype *captype)
+{
+  char *endptr;
+  unsigned char t;
+  if (!strtouc(&t, str, &endptr, 10)) {
+    // The number was too large.
+    printf("slidestruct read error: malformed captype. Specified captype too "
+        "large - must be in range [0, %u]. Error", UCHAR_MAX);
+    return false;
+  }
+  else if (str == endptr) {
+    // The string didn't start with a number.
+    printf("slidestruct read error: malformed captype. Specified captype did "
+        "not start with a number. Error");
+    return false;
+  }
+  else if (*endptr != '\n') {
+    printf("slidestruct read error: malformed captype. Specified captype did "
+        "not contain only a number. Error");
+    return false;
+  }
+  else if (t > INTERP_CAPTYPE_MAX) {
+    printf("slidestruct read error: parsed value %u out of range", t);
+    return false;
+  }
+
+  *captype = (interp_captype)t;
+  return true;
 }
 
 /**
