@@ -29,6 +29,7 @@
 #                       for timespec
 BASE_CFLAGS = -O1 -Wall -std=c99 -D_DEFAULT_SOURCE -Wno-missing-braces \
   -Wextra -Wstrict-prototypes
+BASE_CFLAGS += -I../include
 
 BUILD_DIR = build
 
@@ -60,7 +61,6 @@ CC_RPI = ../../amiibrOS-buildroot/output/host/bin/arm-linux-gcc
 # -std=gnu99 (defines C language mode (GNU C from 1999 revision))
 CFLAGS_RPI = $(BASE_CFLAGS) -std=gnu99 -s
 CFLAGS_RPI += -L../../amiibrOS-buildroot/output/target/usr/lib
-CFLAGS_RPI += -I../include
 LIBS_RPI = -lraylib -lbrcmGLESv2 -lbrcmEGL -lpthread -lrt -lm -lbcm_host -ldl
 
 SRC_RPI = slidestruct.h slidestruct_defaults.h slidestruct.c main.c
