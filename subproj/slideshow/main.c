@@ -105,6 +105,9 @@ int main (void) {
       // Treat origin as centered: TODO Possible option per image!!!
       Vector2 origin = {destRec.width / 2, destRec.height / 2};
       DrawTexturePro(texture, srcRec, destRec, origin, rot, tint);
+
+      if ( (++texture_idx) >= textures_len)
+        texture_idx = 0; // Reset the texture count, we looped through all imgs
     }
     
     // TODO Draw title text and stuff if applicable
@@ -114,12 +117,10 @@ int main (void) {
     // Check if time has elasped for the slide:
     if (timeElapsed >= current_slide->slide_duration) {
       unload_slide_textures(textures, textures_len); // Unload old textures
-      texture_idx++;
       
       if ( (current_slide = current_slide->next) == NULL) {
         // Loops back to the first slide if we reach the end.
         current_slide = ss;
-        texture_idx = 0; // Reset the texture count
       }
       
       // Update to new images:
