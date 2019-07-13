@@ -148,13 +148,14 @@ slidestruct *slidestruct_read_conf (const char *path)
       // The current slidestruct is the newly created one:
       current_slidestruct = new_ss;
       // Copy the setting (title) so that we can name the slidestruct:
-      size_t title_len = strlen(opt_end+1) + 1; // +1 for NUL
+      size_t title_len = strlen(opt_end+1); // +1 for NUL -1 for '\0'
       char *title = malloc(title_len);
       if (title == NULL) {
         perror("slidestruct read malloc error");
         return NULL;
       }
       strncpy(title, opt_end+1, title_len);
+      title[title_len - 1] = '\0'; // Replace '\n' with '\0'
       current_slidestruct->title = title;
       
     }
@@ -216,14 +217,14 @@ slidestruct *slidestruct_read_conf (const char *path)
       current_imgstruct = new_is;
       // Copy the setting (img_name) so that we can set the resource path for
       //   the current image:
-      size_t img_name_len = strlen(opt_end+1) + 1; // +1 for NUL
-      printf("%s, %zu\n", opt_end+1, img_name_len);
+      size_t img_name_len = strlen(opt_end+1); // +1 for NUL -1 for '\n'
       char *img_name = malloc(img_name_len);
       if (img_name == NULL) {
         perror("slidestruct read malloc error");
         return NULL;
       }
       strncpy(img_name, opt_end+1, img_name_len);
+      img_name[img_name_len - 1] = '\0'; // Replace '\n' with '\0'
       printf("%s\n", img_name);
       current_imgstruct->img_name = img_name;
     }
