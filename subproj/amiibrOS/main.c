@@ -24,11 +24,11 @@
 #include <sys/wait.h> // waitpid, wait
 #include <sys/stat.h> // stat
 #include <stdbool.h> // true, false
+#include <pthread.h> // various multithreading
+#include "interface.h" // amiibrOS interface
 
 #define INTERPRETER_PATH "/usr/bin/python"
 #define A_SCAN_PATH "/usr/bin/amiibrOS/amiibo_scan/amiibo_scan.py"
-#define MAIN_INTERFACE_FOLDER "/usr/bin/amiibrOS/main_interface"
-#define MAIN_INTERFACE_PATH (MAIN_INTERFACE_FOLDER "/main_interface")
 
 // Raw info size in bytes to be retrieved from scanner output:
 #define RAW_INFO_SIZE 4
@@ -56,6 +56,7 @@
 //   only once during this process's lifetime.
 static pid_t a_scan_pid;
 static pid_t app_pid; // current game/display pid
+static bool app_pid_set = false; // has app_pid been set at least once?
 static int pipefds[2]; // pipes to communicate with scanner program
 
 /**
@@ -241,22 +242,24 @@ void raw_to_hex_tag (const char *raw_info, char *hex_tag)
 void launch_app (const char *hex_tag)
 {
   char app_dir[APP_DIR_LEN + 1]; // +1 for NUL
-  char app_path[APP_PATH_LEN + 1]; // +1 for NUL
+  char app_path[APP_PATH_LEN + 4]; // +1 for NUL +3 for ".sh"
   struct stat stat_buf; // We need this as a mandatory parameter for stat call
 
   // Construct the paths to the directory and executable:
   sprintf(app_dir, "%s/%s", APP_ROOT_PATH, hex_tag);
-  sprintf(app_path, "%s/%s", app_dir, hex_tag);
+  sprintf(app_path, "%s/%s.sh", app_dir, hex_tag);
 
   printf("app_path: %s\n", app_path);
 
   // Check if a program matching hex_tag exists and is accessible:
   if (stat(app_path, &stat_buf) != -1) {
-    // Write the hex_tag to the global last_scanned file:
+    // Tell our UI to play 'amiibo scanned' and 'fade out' animation and then
+    //   auto stop:
     // TODO
 
-    // Send SIGTERM signal to current app_pid to close it:
-    kill(app_pid, SIGTERM);
+    // Send SIGTERM signal to current app_pid (if exists) to close it:
+    if (app_pid_set)
+      kill(app_pid, SIGTERM);
     // Reaping is done via the sigchld handler
 
     // Attempt to execute a new app:
@@ -269,15 +272,16 @@ void launch_app (const char *hex_tag)
       if (chdir(app_dir) == -1)
         c_exit_err("os_ctrl unable to change dir. for new app\nerror", true);
 
-      execl(app_path, app_path, NULL);
+      execl("/bin/sh", "sh", app_path, NULL); // Execute as .sh shell script
       
       c_exit_err("os_ctrl unable to spawn app\nerror", true);
       // Note, as mentioned ealier, no need to undo our signal stuff
     }
+    app_pid_set = true;
   }
   else {
     // No program matches. Notify user of the given amiibo's incompatibility:
-    // TODO Send sigusr1
+    // TODO tell UI to play 'not found' animation.
     perror("AMIIBO APP NOT FOUND\nerror"); // TODO Remove
   }
 }
@@ -330,45 +334,29 @@ int main (void)
     if (close(pipefds[1]))
       p_exit_err("os_ctrl unable to close write end of pipe\nerror", true);
 
-    // Fork the main_interface process as our first app:
-    if ( (app_pid = fork()) == 0) { // APP CHILD BEGIN
-      // Close unused read-end of pipe for the newly spawned app
-      if (close(pipefds[0]))
-        c_exit_err("os_ctrl unable to close write end of pipe\nerror", true);
+    // Start a new thread for our main interface:
+    pthread_t uithread;
+    if (pthread_create(&uithread, NULL, start_interface, NULL)) {
+      p_exit_err("amiibrOS unable to start UI thread\nerror", true);
+    }
+    // Note that when main exits, the system will automatically kill uithread.
 
-      // Change directory to exec from (we want all relative paths to function)
-      if (chdir(MAIN_INTERFACE_FOLDER) == -1)
-        c_exit_err("os_ctrl unable to change dir. for main_interface\nerror",
-            true);
-
-      char *const argv[] = {MAIN_INTERFACE_PATH, NULL};
-      execv(MAIN_INTERFACE_PATH, argv);
-      
-      c_exit_err("os_ctrl unable to spawn main_interface\nerror", true);
-      // Note, as mentioned ealier, no need to undo our signal stuff
-    } // APP CHILD END
-    else {
-      // Unblock SIGCHLD
-      if (sigprocmask(SIG_SETMASK, &prev_set, NULL) == -1)
-        p_exit_err("os_ctrl unable to unblock signals\nerror", true);
-
-      // Continuously monitor the scanner:
-      char raw_info[RAW_INFO_SIZE];
-      char hex_tag[HEX_TAG_SIZE + 1]; // +1 for NUL
-      for(;;) {
-        // Read raw tag
-        if (read_raw_info(pipefds[0], raw_info) == 0) {
-          // Write-end of pipe closed prematurely. There is an error!
-          p_exit_err("os_ctrl detected erroneous pipe disconnect\nerror: pipe "
-              "write-end closed prematurely\n", false);
-        }
-
-        // Convert raw tag to hex string:
-        raw_to_hex_tag(raw_info, hex_tag);
-        
-        // Launch app based on hex string:
-        launch_app(hex_tag);
+    // Continuously monitor the scanner:
+    char raw_info[RAW_INFO_SIZE];
+    char hex_tag[HEX_TAG_SIZE + 1]; // +1 for NUL
+    for(;;) {
+      // Read raw tag
+      if (read_raw_info(pipefds[0], raw_info) == 0) {
+        // Write-end of pipe closed prematurely. There is an error!
+        p_exit_err("os_ctrl detected erroneous pipe disconnect\nerror: pipe "
+            "write-end closed prematurely\n", false);
       }
+
+      // Convert raw tag to hex string:
+      raw_to_hex_tag(raw_info, hex_tag);
+      
+      // Launch app based on hex string:
+      launch_app(hex_tag);
     }
   }
   

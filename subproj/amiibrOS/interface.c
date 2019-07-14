@@ -1,7 +1,7 @@
 /**
- * main.c
+ * interface.c
  *
- * Contains implementation of amiibrOS's main_interface. Features a cool logo
+ * Contains implementation of amiibrOS's main interface. Features a cool logo
  *   and an indicator for amiibo NFC.
  * The indicator (referred to as touch indicator or TI), pulses, fading in and
  *   out and switching colors.
@@ -12,6 +12,7 @@
 #include <stdio.h> // sprintf
 #include <math.h> // sin
 #include "raylib.h"
+#include "interface.h"
 
 #define SCREEN_WIDTH 1440
 #define SCREEN_HEIGHT 900
@@ -37,6 +38,11 @@ static const char *LOGO_PATH = "resources/logo.png";
 // Determines sine wave frequency (Hz) for TI light pulse animation.
 #define TI_PULSE_FREQ 0.5f
 const float TI_PULSE_PERIOD = 1/TI_PULSE_FREQ;
+
+// === Runtime Flags ===
+// These flags are controllable by the host program through helper functions.
+bool flag_stop = false;
+// === ===
 
 /**
  * Performs a simplified integer modulus (x mod y) for the two given floats.
@@ -77,8 +83,11 @@ void update_ti(float *ti_alpha, unsigned int *current_ti)
   }
 }
 
-int main(void)
+void *start_interface (void *arg)
 {
+  // arg exists only to satisfy pthreads.
+  (void)arg; // We tell compiler to ignore the fact that we never use arg.
+
   InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "amiibrOS"); // Init OpenGL context
   
   SetTargetFPS(60);
@@ -97,7 +106,7 @@ int main(void)
   }
   current_ti = 0; // Start the sequence from beginning.
 
-  while (!WindowShouldClose()) { // while KEY_ESCAPE not yet pressed
+  while (flag_stop != true) {
     update_ti(&ti_alpha, &current_ti); // Calculate alpha value & current_ti
     Color ti_color = Fade(WHITE, ti_alpha);
 
@@ -112,6 +121,7 @@ int main(void)
 
     EndDrawing();
   }
+  flag_stop = false; // Reset flag since we handled it.
   
   // Unload all touch indicator textures:
   for (current_ti = 0; current_ti < TI_TEX_CNT; current_ti++) {
@@ -122,5 +132,11 @@ int main(void)
 
   CloseWindow(); // Close OpenGL context
 
-  return 0;
+  return NULL; // You can safely ignore this. This is just to satisfy pthreads.
+}
+
+void stop_interface (void)
+{
+  // Setting this flag will begin the unloading process on the next draw cycle.
+  flag_stop = true;
 }
