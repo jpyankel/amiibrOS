@@ -7,7 +7,7 @@ subproj/include/
 # Ignore amiibrOS build
 subproj/amiibrOS/build/
 
-# Ignore some amiibrOS testing resources/executables
+# Ignore some (not all of) amiibrOS testing resources/executables
 subproj/amiibrOS/test/resources/
 subproj/amiibrOS/test/amiibrOS_test
 
