@@ -26,13 +26,6 @@
 void *start_interface (void*);
 
 /**
- * Stops the UI drawing process and closes out the main window.
- * Call this function from the main thread to stop the interface on the next
- *   draw cycle.
- */
-void stop_interface (void);
-
-/**
  * Plays an animation and changes the text based on the value given for
  *   success.
  * This function will block until the animation is completed by the UI thread.

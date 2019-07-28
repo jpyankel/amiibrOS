@@ -62,10 +62,10 @@ const double FI_ANIM_PERIOD = (double)FI_ANIM_LEN / (double)FI_ANIM_FLSH_CNT;
 
 // === Runtime Flags ===
 // These flags are controllable by the host program through helper functions.
-bool flag_stop = false;
-bool flag_scan_success_anim = false;
-bool flag_scan_failed_anim = false;
-bool flag_fadeout_anim = false;
+volatile bool flag_stop = false;
+volatile bool flag_scan_success_anim = false;
+volatile bool flag_scan_failed_anim = false;
+volatile bool flag_fadeout_anim = false;
 // =====================
 // === Runtime Variables ===
 double anim_start; // Current animation's start time.
@@ -296,7 +296,6 @@ void *start_interface (void *arg)
 void stop_interface (void)
 {
   // Setting this flag will begin the unloading process on the next draw cycle.
-  flag_stop = true;
 }
 
 void play_scan_anim (bool success)
@@ -337,6 +336,7 @@ void fade_out_interface (void)
     pthread_cond_wait (&flag_cond, &flag_mutex);
   }
 
+  flag_stop = true;
   pthread_mutex_unlock(&flag_mutex);
 
   printf("FADEOUT ANIM END\n");
