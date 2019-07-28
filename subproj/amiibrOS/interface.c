@@ -34,8 +34,8 @@ static const char *LOGO_PATH = "resources/logo.png";
 #define TI_TEX_CNT 6
 // TODO: These will need to be reconfigured when the physical build is
 //   constructed.
-#define TI_X 891
-#define TI_Y 500
+#define TI_X 960
+#define TI_Y 700
 #define TI_SIZE 378
 // Determines sine wave frequency (Hz) for TI light pulse animation.
 #define TI_PULSE_FREQ 0.5f
@@ -50,6 +50,8 @@ const float TI_PULSE_PERIOD = 1/TI_PULSE_FREQ;
 #define SI_ANIM_SIZE_START TI_SIZE
 #define SI_ANIM_SIZE_END 2512
 
+// Failure indicator texture path:
+#define FI_PATH "resources/failure_indicator.png"
 // Failure indicator flashing animation duration (in seconds):
 #define FI_ANIM_LEN 1
 // Failure indicator tint color
@@ -57,8 +59,15 @@ const float TI_PULSE_PERIOD = 1/TI_PULSE_FREQ;
 // # of times the indicator flashes in the duration FI_ANIM_LEN
 #define FI_ANIM_FLSH_CNT 2
 const double FI_ANIM_PERIOD = (double)FI_ANIM_LEN / (double)FI_ANIM_FLSH_CNT;
+const double FI_ANIM_FREQ = 1.0/((double)FI_ANIM_LEN/(double)FI_ANIM_FLSH_CNT);
 
 #define FADEOUT_ANIM_LEN 1
+    
+#define INSTR_TEXT "Place amiibo stand against glow"
+#define INSTR_X 50
+#define INSTR_Y 675
+#define INSTR_FONTSIZE 45
+#define INSTR_COLOR DARKGRAY
 
 // === Runtime Flags ===
 // These flags are controllable by the host program through helper functions.
@@ -117,7 +126,7 @@ void update_ti(float *ti_alpha, unsigned int *current_ti)
  *   function must be called between BeginDrawing/EndDrawing calls.
  * Once the animation time runs out, the animation flag is reset.
  */
-void anim_success_indicator (Texture2D *success_indicator)
+void anim_success_indicator (Texture2D *texture)
 {
   // Calculate updated values:
   double timeElapsed = GetTime() - anim_start;
@@ -127,15 +136,14 @@ void anim_success_indicator (Texture2D *success_indicator)
   }
   double size = EaseLinearInOut(timeElapsed, SI_ANIM_SIZE_START,
                                 SI_ANIM_SIZE_END, SI_ANIM_LEN);
-  Rectangle srcRec = (Rectangle){0, 0, success_indicator->width,
-                                 success_indicator->height};
+  Rectangle srcRec = (Rectangle){0, 0, texture->width, texture->height};
   Rectangle destRec = (Rectangle){TI_X, TI_Y, size, size};
   Vector2 origin = {destRec.width / 2, destRec.height / 2};
   float rot = 0;
   Color tint = SI_TINT;
 
   // Draw the indicator
-  DrawTexturePro(*success_indicator, srcRec, destRec, origin, rot, tint);
+  DrawTexturePro(*texture, srcRec, destRec, origin, rot, tint);
 
   // If this is our last draw cycle, we reset the flag here:
   if (timeElapsed == SI_ANIM_LEN) {
@@ -153,27 +161,34 @@ void anim_success_indicator (Texture2D *success_indicator)
  *   function must be called between BeginDrawing/EndDrawing calls.
  * Once the animation time runs out, the animation flag is reset.
  */
-void anim_fail_indicator (Texture2D *success_indicator)
+void anim_fail_indicator (Texture2D *texture)
 {
-  // Calculate updated values:
+  // Update time:
   double timeElapsed = GetTime() - anim_start;
   if (timeElapsed > FI_ANIM_LEN) {
     // This is our last draw cycle:
     timeElapsed = FI_ANIM_LEN;
   }
-  /*
-  Rectangle srcRec = (Rectangle){0, 0, success_indicator.width,
-                                 success_indicator.height};
-  Rectangle destRec = (Rectangle){TI_X, TI_Y, size, size};
+  
+  // Recalculate time-based variables:
+  Rectangle srcRec = (Rectangle){0, 0, texture->width, texture->height};
+  Rectangle destRec = (Rectangle){TI_X, TI_Y, SI_ANIM_SIZE_START,
+                                  SI_ANIM_SIZE_START};
   Vector2 origin = {destRec.width / 2, destRec.height / 2};
   float rot = 0;
   Color tint = FI_TINT;
-  tint.a = EaseLinearInOut(fmod(timeElapsed, FI_ANIM_PERIOD),
-                           0, 255, _ANIM_LEN);
+  int new_alpha = trunc(
+    255 * sin(fwrap(timeElapsed, FI_ANIM_PERIOD) * 2 * PI * FI_ANIM_FREQ)
+  );
+  if (new_alpha < 0) { // Clamp to 0 (invisible) when sine goes negative.
+    new_alpha = 0;
+  }
+  tint.a = (unsigned char)new_alpha;
 
   // Draw the indicator
-  DrawTexturePro(success_indicator, srcRec, destRec, origin, rot, tint);
-  */
+  DrawTexturePro(*texture, srcRec, destRec, origin, rot, tint);
+  
+  // Check to see if time ran out:
   if (timeElapsed == FI_ANIM_LEN) {
     pthread_mutex_lock(&flag_mutex);
     
@@ -241,6 +256,7 @@ void *start_interface (void *arg)
   // Load logo and other images into GPU memory (must do after OpenGL context)
   Texture2D logo = LoadTexture(LOGO_PATH);
   Texture2D success_indicator = LoadTexture(SI_PATH);
+  Texture2D failure_indicator = LoadTexture(FI_PATH);
 
   Texture2D tis[TI_TEX_CNT];
   unsigned int current_ti; // The current touch indicator texture in the cycle
@@ -258,12 +274,13 @@ void *start_interface (void *arg)
     BeginDrawing();
     ClearBackground(RAYWHITE);
     DrawTexture(logo, LOGO_X, LOGO_Y, WHITE); // Draw logo centered, no tint
+    DrawText(INSTR_TEXT, INSTR_X, INSTR_Y, INSTR_FONTSIZE, INSTR_COLOR);
 
     if (flag_scan_success_anim) { // Play the green light animation:
       anim_success_indicator(&success_indicator);
     }
     else if (flag_scan_failed_anim) { // Play the red flashing animation:
-      anim_fail_indicator(&success_indicator);
+      anim_fail_indicator(&failure_indicator);
     }
     else { // Cycle through the colors, as normal:
       update_ti(&ti_alpha, &current_ti); // Calculate alpha value & current_ti
@@ -285,6 +302,7 @@ void *start_interface (void *arg)
   for (current_ti = 0; current_ti < TI_TEX_CNT; current_ti++) {
     UnloadTexture(tis[current_ti]);
   }
+  UnloadTexture(failure_indicator);
   UnloadTexture(success_indicator);
   UnloadTexture(logo);
 

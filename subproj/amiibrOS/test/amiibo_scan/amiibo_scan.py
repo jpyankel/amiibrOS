@@ -12,7 +12,7 @@ import sys
 import time
 
 if __name__ == "__main__":
-  testbytes1 = bytes.fromhex("00000000")
+  testbytes1 = bytes.fromhex("01000000")
   testbytes2 = bytes.fromhex("01000000")
   print("PYTHON STARTED")
   print("ARGUMENTS: ", str(sys.argv), ". SLEEPING...")
