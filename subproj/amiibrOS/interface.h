@@ -11,6 +11,8 @@
  * Joseph Yankel (jpyankel@gmail.com)
  */
 
+#include <stdbool.h>
+
 /**
  * Starts the UI window and runtime loop for the UI drawing and starts UI state
  *   from the main screen.
@@ -24,8 +26,14 @@
 void *start_interface (void*);
 
 /**
- * Stops the UI drawing process and closes out the main window.
- * Call this function from the main thread to stop the interface on the next
- *   draw cycle.
+ * Plays an animation and changes the text based on the value given for
+ *   success.
+ * This function will block until the animation is completed by the UI thread.
  */
-void stop_interface (void);
+void play_scan_anim (bool success);
+
+/**
+ * Plays a fade out animation over the interface and then tells the UI thread
+ *   to exit. This function blocks until the UI thread is told to quit.
+ */
+void fade_out_interface (void);

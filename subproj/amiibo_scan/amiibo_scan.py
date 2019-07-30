@@ -39,15 +39,22 @@ def main():
     try:
       uid = pn532.read_passive_target(timeout=0.5)
     except RuntimeError:
-      # This occurs when more than one card or an incompatible card is detected.
+      # This occurs when more than one card or incompatible card is detected.
       # Tell amiibrOS that the scanned card could not be identified:
-      #TODO
+      pass #TODO Remove and do as the above comment says
     
     # Try again if no card is available
     if uid is None:
       continue
 
-    charID = pn532.ntag2xx_read_block(CHAR_ID_BLOCK)
+    try:
+      charID = pn532.ntag2xx_read_block(CHAR_ID_BLOCK)
+    except TypeError:
+      # A bug in PN532_SPI will try to subscript a NoneType when the tag read
+      #   becomes garbled (usually because an amiibo was lifted off of the
+      #   scanner)
+      continue # If this happens, we just try again.
+
     # Try again if no ID is available
     if charID is None:
       continue

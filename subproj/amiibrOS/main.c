@@ -58,6 +58,7 @@ static pid_t a_scan_pid;
 static pid_t app_pid; // current game/display pid
 static bool app_pid_set = false; // has app_pid been set at least once?
 static int pipefds[2]; // pipes to communicate with scanner program
+static bool main_ui_active = false;
 
 /**
  * Prints error message (and optionally errno's error).
@@ -237,6 +238,8 @@ void raw_to_hex_tag (const char *raw_info, char *hex_tag)
 
 /**
  * Uses the given hex_tag to find an app for launching.
+ * Then tells the UI thread to play an animation and blocks until the animation
+ *   is complete.
  * Launches this app, replacing any old app processes.
  */
 void launch_app (const char *hex_tag)
@@ -249,13 +252,17 @@ void launch_app (const char *hex_tag)
   sprintf(app_dir, "%s/%s", APP_ROOT_PATH, hex_tag);
   sprintf(app_path, "%s/%s.sh", app_dir, hex_tag);
 
-  printf("app_path: %s\n", app_path);
+  printf("app_path: %s\n", app_path); // TODO REMOVE
 
   // Check if a program matching hex_tag exists and is accessible:
   if (stat(app_path, &stat_buf) != -1) {
-    // Tell our UI to play 'amiibo scanned' and 'fade out' animation and then
-    //   auto stop:
-    // TODO
+    if (main_ui_active == true) { // Only play the animation if on main UI
+      // Tell our UI to play 'amiibo scanned' and 'fade out' animation and then
+      //   auto stop:
+      play_scan_anim(true); // Blocks until animation completes
+      fade_out_interface(); // Blocks until anim completes. Kill main UI thread
+      main_ui_active = false;
+    }
 
     // Send SIGTERM signal to current app_pid (if exists) to close it:
     if (app_pid_set)
@@ -281,7 +288,12 @@ void launch_app (const char *hex_tag)
   }
   else {
     // No program matches. Notify user of the given amiibo's incompatibility:
-    // TODO tell UI to play 'not found' animation.
+    // Tell UI to play 'not found' animation.
+    if (main_ui_active == true) { // Only play the animation if on main UI
+      // Tell our UI to play 'amiibo scanned' and 'fade out' animation and then
+      //   auto stop:
+      play_scan_anim(false);
+    }
     perror("AMIIBO APP NOT FOUND\nerror"); // TODO Remove
   }
 }
@@ -339,6 +351,7 @@ int main (void)
     if (pthread_create(&uithread, NULL, start_interface, NULL)) {
       p_exit_err("amiibrOS unable to start UI thread\nerror", true);
     }
+    main_ui_active = true;
     // Note that when main exits, the system will automatically kill uithread.
 
     // Continuously monitor the scanner:
