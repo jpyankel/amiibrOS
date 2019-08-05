@@ -12,28 +12,71 @@
  */
 
 #include <stdbool.h>
+#include "raylib.h"
 
 /**
- * Starts the UI window and runtime loop for the UI drawing and starts UI state
- *   from the main screen.
+ * Creates the main UI thread and begins the runtime loop for the UI drawing.
+ * This thread will not respond to any blockable signals. These should be
+ *   instead handled in the calling thread.
  *
- * Note, this function will block and must be started from a thread other than
- *   the main in order to prevent blocking of the system.
+ * Warning, all blockable signals will be temporarily blocked on the calling
+ *   thread during this function call. Before the call returns the calling
+ *   thread will have its blocked signals reverted to their original settings.
+ *
+ * Returns true if successful; false if an error occured and errno is set.
+ */
+bool start_interface (void);
+
+/**
+ * Joins the main UI thread after a short cleanup.
+ *
+ * Must be called only after a successful start_interface.
+ */
+bool stop_interface (void);
+
+/**
+ * Plays a scan success animation and fades out the UI.
+ * It uses a background image of the previous screen behind the fade as a hack
+ *   to get around using another framebuffer and RenderTextures to create the
+ *   same effect.
+ *
+ * bg: bg must != NULL. bg is a screencapture of the state right before closing
+ *   the last running program (or mainUI_thread).
+ *
+ * Warning, all blockable signals will be temporarily blocked on
+ *   the calling thread during this function call. Before the call returns the
+ *   calling thread will have its blocked signals reverted to their original
+ *   settings.
+ *
+ * Note, this function will block until the animation is completed.
+ * Note, this function will not free bg on its own. This must be done after the
+ *   function call returns.
  * 
- * Also, this function takes a void* argument to satisfy pthreads. You can
- *   safely ignore it by passing NULL.
+ * Returns true if successful; false if there were errors.
  */
-void *start_interface (void*);
+bool play_scan_success_anim (Image *bg);
 
 /**
- * Plays an animation and changes the text based on the value given for
- *   success.
- * This function will block until the animation is completed by the UI thread.
+ * Plays a scan failed animation.
+ * It uses a background image of the previous screen behind the animation as a
+ *   hack to get around using another framebuffer and RenderTextures to create
+ *   the same effect.
+ *
+ * bg: bg must != NULL. bg is a screencapture of the state right before closing
+ *   the last running program (or mainUI_thread).
+ *
+ * Warning, all blockable signals will be temporarily blocked on
+ *   the calling thread during this function call. Before the call returns the
+ *   calling thread will have its blocked signals reverted to their original
+ *   settings.
+ *
+ * Note, this function will block until the animation is completed.
+ * Note, this function will not free bg on its own. This must be done after the
+ *   function call returns.
+ * 
+ * Returns true if successful; false if there were errors.
  */
-void play_scan_anim (bool success);
+bool play_scan_failed_anim (Image *bg);
 
-/**
- * Plays a fade out animation over the interface and then tells the UI thread
- *   to exit. This function blocks until the UI thread is told to quit.
- */
-void fade_out_interface (void);
+// Returns whether or not the interface (mainUI_thread's interface) is active.
+bool is_interface_active (void);

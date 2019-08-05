@@ -13,7 +13,7 @@ import time
 
 if __name__ == "__main__":
   testbytes1 = bytes.fromhex("01000000")
-  testbytes2 = bytes.fromhex("01000000")
+  testbytes2 = bytes.fromhex("00000000")
   print("PYTHON STARTED")
   print("ARGUMENTS: ", str(sys.argv), ". SLEEPING...")
   time.sleep(5)
@@ -25,4 +25,7 @@ if __name__ == "__main__":
   os.write(int(sys.argv[1]), testbytes2)
   print("WRITE COMPLETE. SCANNER SLEEPING...")
   time.sleep(5)
-  print("SLEEP COMPLETE. CHILD EXITING.")
+  #print("SLEEP COMPLETE. CHILD EXITING.")
+  print("LOOPING FOREVER.")
+  while True:
+    pass

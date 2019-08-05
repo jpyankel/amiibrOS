@@ -26,6 +26,7 @@
 #include <stdbool.h> // true, false
 #include <pthread.h> // various multithreading
 #include "interface.h" // amiibrOS interface
+#include "fbscreenshot.h" // screenshot for fade effect
 
 #define INTERPRETER_PATH "/usr/bin/python"
 #define A_SCAN_PATH "/usr/bin/amiibrOS/amiibo_scan/amiibo_scan.py"
@@ -56,7 +57,6 @@
 //   only once during this process's lifetime.
 static pid_t a_scan_pid;
 static pid_t app_pid; // current game/display pid
-static bool app_pid_set = false; // has app_pid been set at least once?
 static int pipefds[2]; // pipes to communicate with scanner program
 static bool main_ui_active = false;
 
@@ -256,18 +256,54 @@ void launch_app (const char *hex_tag)
 
   // Check if a program matching hex_tag exists and is accessible:
   if (stat(app_path, &stat_buf) != -1) {
-    if (main_ui_active == true) { // Only play the animation if on main UI
+    //if (main_ui_active == true) { // Only play the animation if on main UI
       // Tell our UI to play 'amiibo scanned' and 'fade out' animation and then
       //   auto stop:
-      play_scan_anim(true); // Blocks until animation completes
-      fade_out_interface(); // Blocks until anim completes. Kill main UI thread
-      main_ui_active = false;
-    }
+      //play_scan_anim(true); // Blocks until animation completes
+      //fade_out_interface(); // Blocks until anim completes. Kill main UI thread
+      //main_ui_active = false;
+    //}
 
-    // Send SIGTERM signal to current app_pid (if exists) to close it:
-    if (app_pid_set)
-      kill(app_pid, SIGTERM);
-    // Reaping is done via the sigchld handler
+    // Capture screen for interface animation purposes:
+    printf("About to take screenshot...\n");
+    Image bg = takeFBScreenshot();
+    printf("Screenshot taken!\n");
+    
+    printf("Shutting down previous screen...\n");
+    // Stop the previous screen:
+    if (is_interface_active()) {
+      // We are exiting from interface.
+      stop_interface();
+    }
+    else {
+      // Block SIGCHLD so that we can synchronously use waitpid:
+      sigset_t block_set, old_set;
+      if (sigemptyset(&block_set) == -1 ||
+          sigaddset(&block_set, SIGCHLD) == -1)
+        p_exit_err("amiibrOS unable to create signal mask\nerror", true);
+      if (sigprocmask(SIG_BLOCK, &block_set, &old_set) == -1)
+        p_exit_err("amiibrOS unable to block signals\nerror", true);
+
+      // We are exiting from a program.
+      // First, send sigterm signal:
+      if (kill(app_pid, SIGTERM) == -1)
+        p_exit_err("amiibrOS unable to close previous app\nerror", true);
+
+      // Wait for child process to exit:
+      if (waitpid(app_pid, NULL, 0) == -1)
+        p_exit_err("amiibrOS unable to close previous app\nerror", true);
+
+      // Restore signal mask so that we can asynchronously reap processes again
+      sigprocmask(SIG_SETMASK, &old_set, NULL);
+    }
+    printf("Previous screen shut down!\n");
+
+    printf("Playing animation...\n");
+    // Play scan animation and fade out:
+    play_scan_success_anim(&bg);
+    printf("Animation complete!\n");
+
+    UnloadImage(bg); // Free screenshot data now that animation is finished.
 
     // Attempt to execute a new app:
     if ( (app_pid = fork()) == 0) {
@@ -284,16 +320,15 @@ void launch_app (const char *hex_tag)
       c_exit_err("os_ctrl unable to spawn app\nerror", true);
       // Note, as mentioned ealier, no need to undo our signal stuff
     }
-    app_pid_set = true;
   }
   else {
     // No program matches. Notify user of the given amiibo's incompatibility:
     // Tell UI to play 'not found' animation.
-    if (main_ui_active == true) { // Only play the animation if on main UI
+    /*if (main_ui_active == true) { // Only play the animation if on main UI
       // Tell our UI to play 'amiibo scanned' and 'fade out' animation and then
       //   auto stop:
       play_scan_anim(false);
-    }
+    }*/
     perror("AMIIBO APP NOT FOUND\nerror"); // TODO Remove
   }
 }
@@ -342,16 +377,20 @@ int main (void)
     //   in the child process as they get overwritten by execv anyways.
   } // SCANNER CHILD END
   else {
+    // Reopen parent process to receiving SICHLD:
+    if (sigprocmask(SIG_SETMASK, &prev_set, NULL) == -1)
+      p_exit_err("amiibrOS unable to unblock signals\nerror", true);
+
     // Close unused write-end of pipe for parent (and for other process).
     if (close(pipefds[1]))
       p_exit_err("os_ctrl unable to close write end of pipe\nerror", true);
 
     // Start a new thread for our main interface:
-    pthread_t uithread;
+    start_interface();
+    /*pthread_t uithread;
     if (pthread_create(&uithread, NULL, start_interface, NULL)) {
       p_exit_err("amiibrOS unable to start UI thread\nerror", true);
-    }
-    main_ui_active = true;
+    }*/
     // Note that when main exits, the system will automatically kill uithread.
 
     // Continuously monitor the scanner:
