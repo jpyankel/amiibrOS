@@ -1,6 +1,10 @@
 # Ignore personal settings
 amiibrOS-overlay/etc/wpa_supplicant.conf
 
+# Ignore personal apps
+amiibrOS-overlay/usr/bin/amiibrOS/app/*
+!amiibrOS-overlay/usr/bin/amiibrOS/app/README.md
+
 # Ignore subproject includes
 subproj/include/
 
