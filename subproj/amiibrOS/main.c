@@ -146,9 +146,13 @@ void sigchld_handler(int sig)
   pid_t p;
   // Quickly check and reap ready processes (do not block if there are none)
   while ( (p = waitpid(-1, NULL, WNOHANG)) > 0) {
-    if (p == a_scan_pid) {
+    if (p == a_scan_pid) { // Our scanner died unexpectedly...
       // print error message, wait for processes to die, exit.
       p_exit_err_sigsafe(SIGCHLD_SCANNER_ERROR, SIGCHLD_SCANNER_ERROR_LEN);
+    }
+    else { // Our child program died.
+      if (!is_interface_active())
+        start_interface(); // Start a new thread for our main interface.
     }
   }
   if (p == -1) {
