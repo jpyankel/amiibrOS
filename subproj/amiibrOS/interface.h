@@ -28,55 +28,32 @@
 bool start_interface (void);
 
 /**
- * Joins the main UI thread after a short cleanup.
+ * Joins the main UI thread after a short cleanup and fade-out animation.
  *
  * Must be called only after a successful start_interface.
  */
 bool stop_interface (void);
 
 /**
- * Plays a scan success animation and fades out the UI.
- * It uses a background image of the previous screen behind the fade as a hack
- *   to get around using another framebuffer and RenderTextures to create the
- *   same effect.
- *
- * bg: bg must != NULL. bg is a screencapture of the state right before closing
- *   the last running program (or mainUI_thread).
- *
- * Warning, all blockable signals will be temporarily blocked on
- *   the calling thread during this function call. Before the call returns the
- *   calling thread will have its blocked signals reverted to their original
- *   settings.
+ * Plays a scan success animation.
  *
  * Note, this function will block until the animation is completed.
- * Note, this function will not free bg on its own. This must be done after the
- *   function call returns.
  * 
  * Returns true if successful; false if there were errors.
  */
-bool play_scan_success_anim (Image *bg);
+bool play_scan_success_anim (void);
 
 /**
- * Plays a scan failed animation.
- * It uses a background image of the previous screen behind the animation as a
- *   hack to get around using another framebuffer and RenderTextures to create
- *   the same effect.
+ * Plays a scan failed animation: A flashing X mark.
  *
  * bg: bg must != NULL. bg is a screencapture of the state right before closing
  *   the last running program (or mainUI_thread).
  *
- * Warning, all blockable signals will be temporarily blocked on
- *   the calling thread during this function call. Before the call returns the
- *   calling thread will have its blocked signals reverted to their original
- *   settings.
- *
  * Note, this function will block until the animation is completed.
- * Note, this function will not free bg on its own. This must be done after the
- *   function call returns.
  * 
  * Returns true if successful; false if there were errors.
  */
-bool play_scan_failed_anim (Image *bg);
+bool play_scan_fail_anim (void);
 
 // Returns whether or not the interface (mainUI_thread's interface) is active.
 bool is_interface_active (void);

@@ -47,8 +47,8 @@ CFLAGS_LINUX += -L/lib
 LIBS_LINUX = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lc
 
 # Files included in compilation (order matters)
-SRC_LINUX = interface.h interface.c fbscreenshot.h fbscreenshot.c main.c
-SRC_LINUX_TEST = interface.h interface.c fbscreenshot.h fbscreenshot.c main.c
+SRC_LINUX = interface.h interface.c main.c
+SRC_LINUX_TEST = interface.h interface.c main.c
 
 # Output file name
 NAME_LINUX = amiibrOS_dev
@@ -64,7 +64,7 @@ CFLAGS_RPI = $(BASE_CFLAGS) -std=gnu99 -s
 CFLAGS_RPI += -L../../amiibrOS-buildroot/output/target/usr/lib
 LIBS_RPI = -lraylib -lbrcmGLESv2 -lbrcmEGL -lpthread -lrt -lm -lbcm_host -ldl
 
-SRC_RPI = interface.h interface.c fbscreenshot.h fbscreenshot.c main.c
+SRC_RPI = interface.h interface.c main.c
 
 NAME_RPI = amiibrOS
 # === ===

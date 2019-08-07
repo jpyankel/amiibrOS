@@ -82,33 +82,37 @@ const double FI_ANIM_FREQ = 1.0/((double)FI_ANIM_LEN/(double)FI_ANIM_FLSH_CNT);
 
 // === Runtime Flags ===
 // These flags are controllable by the host program via helper functions.
+// They signal to the mainUI_thread, telling it to perform animations, etc..
 volatile bool flag_stop = false; // Stops the mainUI_thread
-//volatile bool flag_failed_anim = false; // Scan failed animation
+volatile bool flag_scan_success_anim = false; // Starts scan_success animation
+volatile bool flag_scan_fail_anim = false; // Starts scan failed animation
 // =====================
 // === Runtime Variables ===
-double anim_start; // Current animation's start time.
+double anim_start; // Current animation start time.
 pthread_mutex_t flag_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t flag_cond = PTHREAD_COND_INITIALIZER;
 pthread_t mainUI_thread; // Thread running the amiibrOS interface
 bool mainUI_thread_active = false; // Whether or not mainUI_thread is running
-pthread_t closeAnimUI_thread; // Thread running the closing sequence
 // =========================
 
 // === Function Prototypes ===
 bool start_interface (void);
 bool stop_interface (void);
-bool play_scan_success_anim (Image *bg);
-bool play_scan_failed_anim (Image *bg);
+bool play_scan_success_anim (void);
+bool play_scan_fail_anim (void);
+bool is_interface_active (void);
 
 void *start_mainUI_thread (void* arg);
-void *start_closeAnimUI_thread (void* bg);
 
-void anim_success_indicator (Texture2D *texture, double time_elapsed);
-void anim_fadeout (double time_elapsed);
+void anim_success_indicator (Texture2D *texture);
+void anim_fail_indicator (Texture2D *texture);
+void anim_fadeout (bool *flag_fade_anim);
 
 float fwrap (float x, float y);
 bool threadsafe_read_flag (volatile bool *flag, bool *state);
 bool threadsafe_write_flag (volatile bool *flag, bool new_state);
+bool threadsafe_read_mainUI_flags (bool *stop_val,
+    bool *scan_success_val, bool *scan_fail_val);
 
 void update_ti(float *ti_alpha, unsigned int *current_ti);
 void draw_touch_indicator (Texture2D *texture, Color *tint);
@@ -139,6 +143,7 @@ bool start_interface (void)
 
 bool stop_interface (void)
 {
+  printf("STOPPING INTERFACE\n");
   // Setting this flag will begin the unloading process on the next draw cycle.
   if (!threadsafe_write_flag(&flag_stop, true)) // Tell main ui thread to stop
     return false;
@@ -148,37 +153,54 @@ bool stop_interface (void)
     return false;
   mainUI_thread_active = false; // Keep track of state for later use
 
+  printf("STOPPING COMPLETE\n");
   return true; // Animation complete and thread rejoined.
 }
 
-bool play_scan_success_anim (Image *bg)
+bool play_scan_success_anim (void)
 {
-  // Temporarily block all signals so that child thread inherits a mask with
-  //   all blockable signals blocked:
-  sigset_t set;
-  sigset_t oldset;
-  sigfillset(&set);
-  if (pthread_sigmask(SIG_SETMASK, &set, &oldset))
+  printf("PLAYING SUCCESS ANIM\n");
+  if (pthread_mutex_lock(&flag_mutex))
     return false;
 
-  // Create new thread:
-  if (pthread_create(&closeAnimUI_thread, NULL, start_closeAnimUI_thread,
-      (void*)bg))
+  // Signal animation to start by setting animation flag:
+  flag_scan_success_anim = true;
+
+  // Wait for the flag change to signal us that animation completed:
+  while (flag_scan_success_anim) {
+    // Sleep main thread until pthread_cond_signal is called on UI thread.
+    if (pthread_cond_wait (&flag_cond, &flag_mutex))
+      return false;
+  }
+
+  if (pthread_mutex_unlock(&flag_mutex))
     return false;
 
-  if (pthread_sigmask(SIG_SETMASK, &oldset, NULL)) // Restore signal mask
-    return false;
-
-  // Wait for the closeAnimUI_thread to finish cleanup before continuing:
-  if (pthread_join(closeAnimUI_thread, NULL))
-    return false;
-
+  printf("SUCCESS ANIM COMPLETE\n");
   return true; // Animation finished successfully
 }
 
-bool play_scan_failed_anim (Image *bg)
+bool play_scan_fail_anim (void)
 {
-  return true; // TODO Implement
+  printf("PLAYING FAIL ANIM\n");
+  if (pthread_mutex_lock(&flag_mutex))
+    return false;
+
+  // Signal animation to start by setting animation flag:
+  flag_scan_fail_anim = true;
+
+  // Wait for the flag change to signal us that animation completed:
+  while (flag_scan_fail_anim) {
+    // Sleep main thread until pthread_cond_signal is called on UI thread.
+    if (pthread_cond_wait (&flag_cond, &flag_mutex))
+      return false;
+  }
+
+  if (pthread_mutex_unlock(&flag_mutex))
+    return false;
+
+  printf("FAIL ANIM COMPLETE\n");
+  return true; // Animation finished successfully
 }
 
 bool is_interface_active (void)
@@ -211,7 +233,8 @@ void *start_mainUI_thread (void* arg)
   SetTargetFPS(60);
   // Load logo and other images into GPU memory (must do after OpenGL context)
   Texture2D logo = LoadTexture(LOGO_PATH);
-  Texture2D failure_indicator = LoadTexture(FI_PATH);
+  Texture2D success_indicator = LoadTexture(SI_PATH);
+  Texture2D fail_indicator = LoadTexture(FI_PATH);
 
   Texture2D tis[TI_TEX_CNT];
   unsigned int current_ti; // The current touch indicator texture in the cycle
@@ -225,115 +248,67 @@ void *start_mainUI_thread (void* arg)
   }
   current_ti = 0; // Start the sequence from beginning.
 
-  bool flag_stop_val;
-  threadsafe_read_flag(&flag_stop, &flag_stop_val);
-  while (flag_stop_val != true) {
+  bool stop_val;
+  bool scan_success_val;
+  bool scan_fail_val;
+  // Read in thread-shared values:
+  // TODO Error check:
+  threadsafe_read_mainUI_flags(&stop_val, &scan_success_val, &scan_fail_val);
+
+  while (stop_val != true) {
     BeginDrawing();
+
     ClearBackground(WHITE);
     DrawTexture(logo, LOGO_X, LOGO_Y, WHITE); // Draw logo centered, no tint
     DrawText(INSTR_TEXT, INSTR_X, INSTR_Y, INSTR_FONTSIZE, INSTR_COLOR);
-
     update_ti(&ti_alpha, &current_ti); // Calculate alpha value & current_ti
     Color color = Fade(WHITE, ti_alpha);
     Texture2D texture = tis[current_ti];
-
     draw_touch_indicator(&texture, &color);
+
+    if (scan_success_val) {
+      if (anim_start == 0) // If the animation hasn't been started yet...
+        anim_start = GetTime(); // ... start it from beginning!
+      anim_success_indicator(&success_indicator);
+    }
+    else if (scan_fail_val) {
+      if (anim_start == 0)
+        anim_start = GetTime();
+      anim_fail_indicator(&fail_indicator);
+    }
 
     EndDrawing();
 
-    threadsafe_read_flag(&flag_stop, &flag_stop_val);
+    // Read in thread-shared values so that loop guards gets updated values:
+    // TODO Error check:
+    threadsafe_read_mainUI_flags(&stop_val, &scan_success_val, &scan_fail_val);
   }
-  
-  threadsafe_write_flag(&flag_stop, false); // Reset flag: We have handled it.
 
+  printf("PLAYING FADE ANIM\n");
+  // We received a signal to stop the interface: Next, play fade out animation:
+  anim_start = GetTime();
+  bool flag_fade_anim = true;
+  while (flag_fade_anim) {
+    BeginDrawing();
+    ClearBackground(WHITE);
+
+    anim_fadeout(&flag_fade_anim);
+
+    EndDrawing();
+  }
+  printf("FADE ANIM COMPLETE\n");
+  
   // Unload all touch indicator textures:
   for (current_ti = 0; current_ti < TI_TEX_CNT; current_ti++) {
     UnloadTexture(tis[current_ti]);
   }
-  UnloadTexture(failure_indicator);
+  UnloadTexture(fail_indicator);
+  UnloadTexture(success_indicator);
   UnloadTexture(logo);
 
   CloseWindow(); // Close OpenGL context
 
-  return NULL; // You can safely ignore this. This is just to satisfy pthreads.
-}
-
-/**
- * Starts a UI window with image background given by bg and plays a success
- *   indicator and fadeout animation overtop.
- *
- * bg: A pointer to an Image containing the previous program's final view to be
- *   displayed as a background to the success and fade out animation.
- *
- * Note, this function will block and must be started from a thread other than
- *   the main in order to prevent blocking of the system.
- *
- * Warning, all signals must be blocked before calling this function. After the
- *   function call returns you may revert back to the previous settings.
- */
-void *start_closeAnimUI_thread (void* bg)
-{
-  InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "amiibrOS"); // Init OpenGL context
-  
-  SetTargetFPS(60);
-
-  // First create texture from image:
-  Image *bg_img = (Image*)bg;
-  Texture2D bg_tex = LoadTextureFromImage(*bg_img);
-
-  // Load other textures:
-  Texture2D success_indicator = LoadTexture(SI_PATH);
-
-  // First play scan success animation:
-  double anim_start = GetTime(); // Current animation's start time.
-  double time_elapsed;
-  while ( (time_elapsed = GetTime() - anim_start) < SI_ANIM_LEN) {
-    BeginDrawing();
-    ClearBackground(RAYWHITE);
-
-    anim_success_indicator(&success_indicator, time_elapsed);
-
-    EndDrawing();
-  }
-  // There is a case where we go from time_elapsed < SI_ANIM_LEN right to
-  //   time_elapsed > SI_ANIM_LEN in the next frame without ever drawing the
-  //   final frame. In this case, we draw one more frame as the final frame:
-  if (time_elapsed > SI_ANIM_LEN) { // Ensure the animation finishes completely
-    // We draw one more frame with the animation at the final step:
-    time_elapsed = SI_ANIM_LEN;
-    BeginDrawing();
-    ClearBackground(RAYWHITE);
-
-    anim_success_indicator(&success_indicator, time_elapsed);
-
-    EndDrawing();
-  }
-
-  // Next play fade out animation:
-  anim_start = GetTime();
-  while ( (time_elapsed = GetTime() - anim_start) < FADEOUT_ANIM_LEN) {
-    BeginDrawing();
-    ClearBackground(RAYWHITE);
-
-    anim_fadeout(time_elapsed);
-
-    EndDrawing();
-  }
-  if (time_elapsed > FADEOUT_ANIM_LEN) {
-    time_elapsed = FADEOUT_ANIM_LEN;
-    BeginDrawing();
-    ClearBackground(RAYWHITE);
-
-    anim_fadeout(time_elapsed);
-
-    EndDrawing();
-  }
-  
-  // Unload textures:
-  UnloadTexture(success_indicator);
-  UnloadTexture(bg_tex);
-
-  CloseWindow(); // Close OpenGL context
+  threadsafe_write_flag(&flag_stop, false); // Reset flag: We have handled it.
 
   return NULL; // You can safely ignore this. This is just to satisfy pthreads.
 }
@@ -342,11 +317,19 @@ void *start_closeAnimUI_thread (void* bg)
 // === Drawing Functions ===
 /**
  * Updates the animatable values of the success indicator and draws it.
- * 
  * This function must be called between BeginDrawing/EndDrawing calls.
+ *
+ * Once the animation time runs out, the animation flag is reset.
  */
-void anim_success_indicator (Texture2D *texture, double time_elapsed)
+void anim_success_indicator (Texture2D *texture)
 {
+  // Update time:
+  double time_elapsed = GetTime() - anim_start;
+  if (time_elapsed > SI_ANIM_LEN) {
+    // This is our last draw cycle:
+    time_elapsed = SI_ANIM_LEN;
+  }
+
   // Calculate updated values:
   double size = EaseLinearInOut(time_elapsed, SI_ANIM_SIZE_START,
                                 SI_ANIM_SIZE_END, SI_ANIM_LEN);
@@ -358,6 +341,62 @@ void anim_success_indicator (Texture2D *texture, double time_elapsed)
 
   // Draw the indicator
   DrawTexturePro(*texture, srcRec, destRec, origin, rot, tint);
+
+  // Check to see if time ran out:
+  if (time_elapsed == SI_ANIM_LEN) {
+    anim_start = 0; // Reset animation start time to indicate no animation
+    pthread_mutex_lock(&flag_mutex); // TODO Error checking
+    
+    flag_scan_success_anim = false; // Disable animation
+
+    pthread_cond_signal(&flag_cond); // Wake main thread
+    pthread_mutex_unlock(&flag_mutex); // TODO Error checking
+  }
+}
+
+/**
+ * Updates the animatable values of the failure indicator and draws it. This
+ *   function must be called between BeginDrawing/EndDrawing calls.
+ *
+ * Once the animation time runs out, the animation flag is reset.
+ */
+void anim_fail_indicator (Texture2D *texture)
+{
+  // Update time:
+  double time_elapsed = GetTime() - anim_start;
+  if (time_elapsed > FI_ANIM_LEN) {
+    // This is our last draw cycle:
+    time_elapsed = FI_ANIM_LEN;
+  }
+  
+  // Recalculate time-based variables:
+  Rectangle srcRec = (Rectangle){0, 0, texture->width, texture->height};
+  Rectangle destRec = (Rectangle){TI_X, TI_Y, SI_ANIM_SIZE_START,
+                                  SI_ANIM_SIZE_START};
+  Vector2 origin = {destRec.width / 2, destRec.height / 2};
+  float rot = 0;
+  Color tint = FI_TINT;
+  int new_alpha = trunc(
+    255 * sin(fwrap(time_elapsed, FI_ANIM_PERIOD) * 2 * PI * FI_ANIM_FREQ)
+  );
+  if (new_alpha < 0) { // Clamp to 0 (invisible) when sine goes negative.
+    new_alpha = 0;
+  }
+  tint.a = (unsigned char)new_alpha;
+
+  // Draw the indicator
+  DrawTexturePro(*texture, srcRec, destRec, origin, rot, tint);
+  
+  // Check to see if time ran out:
+  if (time_elapsed == FI_ANIM_LEN) {
+    anim_start = 0; // Reset animation start time to indicate no animation
+    pthread_mutex_lock(&flag_mutex); // TODO Error checking
+    
+    flag_scan_fail_anim = false; // Disable animation
+
+    pthread_cond_signal(&flag_cond); // Wake main thread
+    pthread_mutex_unlock(&flag_mutex); // TODO Error checking
+  }
 }
 
 /**
@@ -365,9 +404,19 @@ void anim_success_indicator (Texture2D *texture, double time_elapsed)
  *   file.
  *
  * This function must be called between BeginDrawing/EndDrawing calls.
+ *
+ * Resets the local flag (not shared between threads) flag_fade_anim on
+ *   completion.
  */
-void anim_fadeout (double time_elapsed)
+void anim_fadeout (bool *flag_fade_anim)
 {
+  // Update time:
+  double time_elapsed = GetTime() - anim_start;
+  if (time_elapsed > FADEOUT_ANIM_LEN) {
+    // This is our last draw cycle:
+    time_elapsed = FADEOUT_ANIM_LEN;
+  }
+
   // Calculate time-updated values:
   double alpha = EaseLinearInOut(time_elapsed, 0, 255, FADEOUT_ANIM_LEN);
   Color color = (Color){0, 0, 0, alpha};
@@ -375,6 +424,12 @@ void anim_fadeout (double time_elapsed)
 
   // Draw the fadeout rectangle:
   DrawRectangleRec(destRec, color);
+
+  // Check to see if time ran out:
+  if (time_elapsed == FADEOUT_ANIM_LEN) {
+    anim_start = 0; // Reset animation start time to indicate no animation
+    *flag_fade_anim = false; // Animation is completed
+  }
 }
 // =========================
 
@@ -431,6 +486,23 @@ bool threadsafe_write_flag (volatile bool *flag, bool new_state)
 
   return true;
 }
+
+bool threadsafe_read_mainUI_flags (bool *stop_val,
+    bool *scan_success_val, bool *scan_fail_val)
+{
+  // Ensure this thread is the only thread accessing the flags:
+  if (pthread_mutex_lock(&flag_mutex))
+    return false;
+
+  *stop_val = flag_stop;
+  *scan_success_val = flag_scan_success_anim;
+  *scan_fail_val = flag_scan_fail_anim;
+
+  if (pthread_mutex_unlock(&flag_mutex)) // Let other threads access flags
+    return false;
+
+  return true;
+}
 // ===========================
 
 // TODO: Refactor these:
@@ -478,91 +550,3 @@ void draw_touch_indicator (Texture2D *texture, Color *tint)
 
   DrawTexturePro(*texture, srcRec, destRec, origin, rot, *tint);
 }
-
-/**
- * Updates the animatable values of the failure indicator and draws it. This
- *   function must be called between BeginDrawing/EndDrawing calls.
- * Once the animation time runs out, the animation flag is reset.
- */
-/*void anim_fail_indicator (Texture2D *texture)
-{
-  // Update time:
-  double time_elapsed = GetTime() - anim_start;
-  if (time_elapsed > FI_ANIM_LEN) {
-    // This is our last draw cycle:
-    time_elapsed = FI_ANIM_LEN;
-  }
-  
-  // Recalculate time-based variables:
-  Rectangle srcRec = (Rectangle){0, 0, texture->width, texture->height};
-  Rectangle destRec = (Rectangle){TI_X, TI_Y, SI_ANIM_SIZE_START,
-                                  SI_ANIM_SIZE_START};
-  Vector2 origin = {destRec.width / 2, destRec.height / 2};
-  float rot = 0;
-  Color tint = FI_TINT;
-  int new_alpha = trunc(
-    255 * sin(fwrap(time_elapsed, FI_ANIM_PERIOD) * 2 * PI * FI_ANIM_FREQ)
-  );
-  if (new_alpha < 0) { // Clamp to 0 (invisible) when sine goes negative.
-    new_alpha = 0;
-  }
-  tint.a = (unsigned char)new_alpha;
-
-  // Draw the indicator
-  DrawTexturePro(*texture, srcRec, destRec, origin, rot, tint);
-  
-  // Check to see if time ran out:
-  if (time_elapsed == FI_ANIM_LEN) {
-    pthread_mutex_lock(&flag_mutex);
-    
-    flag_scan_failed_anim = false; // Disable animation
-
-    pthread_cond_signal(&flag_cond); // Wake main thread
-    pthread_mutex_unlock(&flag_mutex);
-  }
-}*/
-
-/*
-void play_scan_anim (bool success)
-{
-  printf("ANIM START\n");
-  anim_start = GetTime();
-  
-  // Block until UI Thread finishes animation and resets flag:
-  pthread_mutex_lock(&flag_mutex);
-  
-  if (success) {
-    flag_scan_success_anim = true;
-  }
-  else {
-    flag_scan_failed_anim = true;
-  }
-
-  while (flag_scan_success_anim | flag_scan_failed_anim) {
-    // Sleep main thread until pthread_cond_signal is called on UI thread.
-    pthread_cond_wait (&flag_cond, &flag_mutex);
-  }
-
-  pthread_mutex_unlock(&flag_mutex);
-
-  printf("%s ANIM END\n", success ? "SUCCESS" : "FAILURE");
-}
-
-void fade_out_interface (void)
-{
-  anim_start = GetTime();
-  
-  // Block until UI Thread finishes animation and resets flag:
-  pthread_mutex_lock(&flag_mutex);
-  
-  flag_fadeout_anim = true; // Start animation
-  while (flag_fadeout_anim) {
-    // Sleep main thread until pthread_cond_signal is called on UI thread.
-    pthread_cond_wait (&flag_cond, &flag_mutex);
-  }
-
-  flag_stop = true;
-  pthread_mutex_unlock(&flag_mutex);
-
-  printf("FADEOUT ANIM END\n");
-}*/
