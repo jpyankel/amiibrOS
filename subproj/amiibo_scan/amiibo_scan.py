@@ -33,6 +33,8 @@ def main():
   # Configure PN532 to communicate with MiFare cards
   pn532.SAM_configuration()
 
+  lastCharID = None # Keep track of last charID to prevent spam of same ID
+
   # Enter scanning loop:
   while True:
     # Check if a card is available to read
@@ -62,7 +64,9 @@ def main():
     # Note sys.argv[1] has the pipe's file descriptor if this program is called
     #   from amiibrOS.
     # Tell amiibrOS the hex charID we found:
-    os.write(int(sys.argv[1]), charID)
+    if charID is not lastCharID: # But only if it is not the same as previous
+      os.write(int(sys.argv[1]), charID)
+      lastCharID = charID
 
 if __name__ == "__main__":
   main()
