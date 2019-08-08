@@ -13,6 +13,7 @@
 #include <math.h> // sin fmod
 #include <pthread.h> // pthread_cond_wait, ... etc.
 #include <signal.h> // sigset_t, etc.
+#include <unistd.h> // getpid
 #include "easings.h"
 #include "interface.h"
 
@@ -254,8 +255,9 @@ void *start_mainUI_thread (void* arg)
   // Read in thread-shared values:
   // TODO Error check:
   threadsafe_read_mainUI_flags(&stop_val, &scan_success_val, &scan_fail_val);
-
-  while (stop_val != true) {
+  
+  bool abort_key = false;
+  while (stop_val != true && !(abort_key = WindowShouldClose())) {
     BeginDrawing();
 
     ClearBackground(WHITE);
@@ -309,6 +311,14 @@ void *start_mainUI_thread (void* arg)
   CloseWindow(); // Close OpenGL context
 
   threadsafe_write_flag(&flag_stop, false); // Reset flag: We have handled it.
+
+  // If we exited due to the user pressing escape key, let the main thread know
+  //   so that it can terminate the entire amiibrOS program:
+  printf("WINDOW SHOULD CLOSE: %d\n", abort_key);
+  if (abort_key) {
+    printf("TERMINATING AMIIBROS\n");
+    kill(getpid(), SIGTERM);
+  }
 
   return NULL; // You can safely ignore this. This is just to satisfy pthreads.
 }
