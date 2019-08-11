@@ -8,7 +8,7 @@
 
 start() {
   echo "starting amiibrOS..."
-  cd /usr/bin/amiibrOS && ./amiibrOS
+  #cd /usr/bin/amiibrOS && ./amiibrOS
 }
 
 case "$1" in
