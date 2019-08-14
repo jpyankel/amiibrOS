@@ -14,6 +14,9 @@ subproj/amiibrOS/build/
 # Ignore some (not all of) amiibrOS testing resources/executables
 subproj/amiibrOS/test/resources/
 subproj/amiibrOS/test/amiibrOS_test
+subproj/amiibrOS/test/app/
 
-# Ignore slideshow build
+# Ignore slideshow build and development resources
 subproj/slideshow/build/
+subproj/slideshow/resources/
+subproj/slideshow/test/

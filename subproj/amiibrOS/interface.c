@@ -144,7 +144,6 @@ bool start_interface (void)
 
 bool stop_interface (void)
 {
-  printf("STOPPING INTERFACE\n");
   // Setting this flag will begin the unloading process on the next draw cycle.
   if (!threadsafe_write_flag(&flag_stop, true)) // Tell main ui thread to stop
     return false;
@@ -154,13 +153,11 @@ bool stop_interface (void)
     return false;
   mainUI_thread_active = false; // Keep track of state for later use
 
-  printf("STOPPING COMPLETE\n");
   return true; // Animation complete and thread rejoined.
 }
 
 bool play_scan_success_anim (void)
 {
-  printf("PLAYING SUCCESS ANIM\n");
   if (pthread_mutex_lock(&flag_mutex))
     return false;
 
@@ -177,13 +174,11 @@ bool play_scan_success_anim (void)
   if (pthread_mutex_unlock(&flag_mutex))
     return false;
 
-  printf("SUCCESS ANIM COMPLETE\n");
   return true; // Animation finished successfully
 }
 
 bool play_scan_fail_anim (void)
 {
-  printf("PLAYING FAIL ANIM\n");
   if (pthread_mutex_lock(&flag_mutex))
     return false;
 
@@ -200,7 +195,6 @@ bool play_scan_fail_anim (void)
   if (pthread_mutex_unlock(&flag_mutex))
     return false;
 
-  printf("FAIL ANIM COMPLETE\n");
   return true; // Animation finished successfully
 }
 
@@ -286,7 +280,6 @@ void *start_mainUI_thread (void* arg)
     threadsafe_read_mainUI_flags(&stop_val, &scan_success_val, &scan_fail_val);
   }
 
-  printf("PLAYING FADE ANIM\n");
   // We received a signal to stop the interface: Next, play fade out animation:
   anim_start = GetTime();
   bool flag_fade_anim = true;
@@ -294,11 +287,11 @@ void *start_mainUI_thread (void* arg)
     BeginDrawing();
     ClearBackground(WHITE);
 
+    DrawTexture(logo, LOGO_X, LOGO_Y, WHITE); // Draw logo centered, no tint
     anim_fadeout(&flag_fade_anim);
 
     EndDrawing();
   }
-  printf("FADE ANIM COMPLETE\n");
   
   // Unload all touch indicator textures:
   for (current_ti = 0; current_ti < TI_TEX_CNT; current_ti++) {
@@ -314,9 +307,7 @@ void *start_mainUI_thread (void* arg)
 
   // If we exited due to the user pressing escape key, let the main thread know
   //   so that it can terminate the entire amiibrOS program:
-  printf("WINDOW SHOULD CLOSE: %d\n", abort_key);
   if (abort_key) {
-    printf("TERMINATING AMIIBROS\n");
     kill(getpid(), SIGTERM);
   }
 
