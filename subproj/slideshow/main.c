@@ -11,12 +11,17 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
 #include "slidestruct.h"
 #include "raylib.h"
 #include "easings.h"
 
 #define SCREEN_WIDTH 1440
 #define SCREEN_HEIGHT 900
+
+#define CONF_PATH "resources/config.txt"
+#define RES_PATH "resources/"
+#define RES_PATH_SIZE sizeof(RES_PATH)
 
 // === Function Prototypes ===
 Texture2D *load_slide_textures(slidestruct *current_slide,
@@ -31,7 +36,7 @@ void interp_tint (imgstruct *opts, Color *color, float timeElapsed);
 int main (void)
 {
   // Read slidestruct 
-  slidestruct *ss = slidestruct_read_conf("conf.txt");
+  slidestruct *ss = slidestruct_read_conf(CONF_PATH);
   if (ss == NULL)
     return 1; // We failed to read slidestruct TODO throw error message???
   
@@ -137,7 +142,15 @@ Texture2D *load_slide_textures(slidestruct *current_slide,
   cnt = 0;
   for (imgstruct *opts = current_slide->images; opts != NULL;
        opts = opts->next) {
-    textures[cnt] = LoadTexture(opts->img_name);
+    // Find out the size of the texture's path:
+    size_t name_size = strlen(opts->img_name);
+    size_t path_size = RES_PATH_SIZE + name_size; // RES_PATH_SIZE includes NUL
+    char img_path[path_size]; // Create a buffer of path_size in length
+    // Construct the image path:
+    strcpy(img_path, RES_PATH);
+    strcat(img_path, opts->img_name);
+    // Load the image and move on to the next:
+    textures[cnt] = LoadTexture(img_path);
     cnt++;
   }
   

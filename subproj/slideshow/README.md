@@ -43,13 +43,16 @@ to this folder).
 * The previous examples assumes slideshow is being run in a directory
   containing slideshow and resources/, where resources contains some folders
   or files including josephImages/joe.png
-TODO
 tint_i
 tint_f
 tint_interp
 tint_duration
-pos_i
-pof_f
+pos_i (x, y)
+* Modifies the initial position of the image.
+* pos_i (112, 800)
+pos_f (x, y)
+* Sets the final position of the image to be used if animating.
+* pos_f (130, 130)
 pos_interp
 pos_duration
 size_i

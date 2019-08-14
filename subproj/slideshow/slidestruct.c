@@ -191,7 +191,7 @@ slidestruct *slidestruct_read_conf (const char *path)
       
       current_slidestruct->slide_duration = slide_duration;
     }
-    else if (!strncmp(opt_start, "img_name", opt_len)) {
+    else if (!strncmp(opt_start, "image_name", opt_len)) {
       if (current_slidestruct == NULL) {
         printf("slidestruct read error: option %s line %zu before a 'title'"
             " option\n", opt_start, lineno);

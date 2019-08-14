@@ -32,6 +32,7 @@ BASE_CFLAGS = -O1 -Wall -std=c99 -D_DEFAULT_SOURCE -Wno-missing-braces \
 BASE_CFLAGS += -I../include
 
 BUILD_DIR = build
+TEST_DIR = test
 
 # === Linux ===a
 CC_LINUX = gcc
@@ -70,7 +71,11 @@ NAME_RPI = slideshow
 
 all: $(NAME_LINUX) $(NAME_LINUX_TEST) $(NAME_RPI)
 
+linux: $(NAME_LINUX)
+
 rpi: $(NAME_RPI)
+
+test: $(NAME_LINUX_TEST)
 
 $(NAME_LINUX): $(SRC_LINUX)
   mkdir -p $(BUILD_DIR)
@@ -80,9 +85,9 @@ $(NAME_LINUX): $(SRC_LINUX)
 		$(SRC_LINUX)
 
 $(NAME_LINUX_TEST): $(SRC_LINUX_TEST)
-  mkdir -p $(BUILD_DIR)
-  cp -r resources $(BUILD_DIR) | true
-  $(CC_LINUX) $(CFLAGS_LINUX) $(LIBS_LINUX) -o $(BUILD_DIR)/$(NAME_LINUX_TEST)\
+  mkdir -p $(TEST_DIR)
+  cp -r resources $(TEST_DIR) | true
+  $(CC_LINUX) $(CFLAGS_LINUX) $(LIBS_LINUX) -o $(TEST_DIR)/$(NAME_LINUX_TEST)\
 		$(SRC_LINUX_TEST)
 
 $(NAME_RPI): $(SRC_RPI)
