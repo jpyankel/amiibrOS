@@ -16,8 +16,8 @@ PATH=/sbin:/bin:/usr/sbin:/usr/bin
 DESC=bluetooth
 
 DAEMON=/usr/libexec/bluetooth/bluetoothd
-HCIATTACH=/usr/sbin/hciattach
-HCICONFIG=/usr/sbin/hciconfig
+HCIATTACH=/usr/bin/hciattach
+HCICONFIG=/usr/bin/hciconfig
 SDPTOOL=/usr/bin/sdptool
 
 SSD_OPTIONS="--oknodo --quiet --exec $DAEMON -- --compat"

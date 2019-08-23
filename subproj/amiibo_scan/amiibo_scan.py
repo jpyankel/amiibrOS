@@ -46,7 +46,7 @@ def main():
       pass #TODO Remove and do as the above comment says
     
     # Try again if no card is available
-    if uid is None:
+    if uid == None:
       continue
 
     try:
@@ -58,13 +58,13 @@ def main():
       continue # If this happens, we just try again.
 
     # Try again if no ID is available
-    if charID is None:
+    if charID == None:
       continue
 
     # Note sys.argv[1] has the pipe's file descriptor if this program is called
     #   from amiibrOS.
     # Tell amiibrOS the hex charID we found:
-    if charID is not lastCharID: # But only if it is not the same as previous
+    if charID != lastCharID: # But only if it is not the same as previous
       os.write(int(sys.argv[1]), charID)
       lastCharID = charID
 
